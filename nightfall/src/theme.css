@@ -1,33 +1,33 @@
-/* The panel stylesheet with every class the panel uses, then Portal's own. Plain Tailwind: no prefix. */
+/* The panel stylesheet with every class the panel uses, then Nightfall's own. Plain Tailwind: no prefix. */
 @import '@pterodactyl/sdk/theme-entry.css';
 
 @theme {
     /* Classic's small corners (rounded-xs) on rows, chips and notices, softened with the rest. */
     --radius-xs: calc(var(--radius) * 0.45);
 
-    --animate-rise: portal-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-    --animate-drift: portal-drift 18s ease-in-out infinite alternate;
+    --animate-rise: nightfall-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-drift: nightfall-drift 18s ease-in-out infinite alternate;
 
-    @keyframes portal-rise {
+    @keyframes nightfall-rise {
         from {
             opacity: 0;
             transform: translateY(0.75rem);
         }
     }
 
-    @keyframes portal-drift {
+    @keyframes nightfall-drift {
         to {
             transform: translate3d(8%, -6%, 0) scale(1.15);
         }
     }
 }
 
-/* Both schemes. The colour settings write --portal-primary and --portal-accent. */
+/* Both schemes. The colour settings write --nightfall-primary and --nightfall-accent. */
 :root {
     --radius: 0.625rem;
     --layout-sidebar-width: 17rem;
-    --primary: var(--portal-primary, oklch(0.58 0.19 259.8));
-    --accent: var(--portal-accent, oklch(0.715 0.126 215.2));
+    --primary: var(--nightfall-primary, oklch(0.58 0.19 259.8));
+    --accent: var(--nightfall-accent, oklch(0.715 0.126 215.2));
     --ring: color-mix(in oklab, var(--primary) 70%, white);
     --theme-color: oklch(0.145 0.004 260);
 
@@ -57,9 +57,9 @@
     --border: oklch(0.28 0.006 260);
     --input: oklch(0.17 0.004 260);
     --input-border: oklch(0.31 0.007 260);
-    --primary: var(--portal-primary, oklch(0.58 0.19 259.8));
+    --primary: var(--nightfall-primary, oklch(0.58 0.19 259.8));
     --primary-foreground: oklch(0.985 0.003 258);
-    --accent: var(--portal-accent, oklch(0.715 0.126 215.2));
+    --accent: var(--nightfall-accent, oklch(0.715 0.126 215.2));
     --accent-foreground: oklch(0.985 0.003 258);
     --sidebar: oklch(0.165 0.004 260);
     --sidebar-foreground: var(--foreground);
@@ -67,7 +67,7 @@
     --terminal-background: oklch(0.16 0.004 260);
 }
 
-/* Light: classic's light scaffold is provisional, so Portal sets its own. */
+/* Light: classic's light scaffold is provisional, so Nightfall sets its own. */
 .light {
     --color-scheme: light;
     --theme-color: oklch(1 0 0);
@@ -85,9 +85,9 @@
     --border: oklch(0.9 0.008 258);
     --input: oklch(1 0 0);
     --input-border: oklch(0.87 0.01 258);
-    --primary: var(--portal-primary, oklch(0.55 0.188 259.8));
+    --primary: var(--nightfall-primary, oklch(0.55 0.188 259.8));
     --primary-foreground: oklch(0.985 0.003 258);
-    --accent: var(--portal-accent, oklch(0.62 0.12 220));
+    --accent: var(--nightfall-accent, oklch(0.62 0.12 220));
     --accent-foreground: oklch(0.985 0.003 258);
     --state-foreground: oklch(0.21 0.01 260);
     --sidebar: oklch(1 0 0);

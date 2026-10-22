@@ -1,8 +1,8 @@
 {
     "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
-    "id": "portal",
+    "id": "nightfall",
     "type": "theme",
-    "name": "Portal",
+    "name": "Nightfall",
     "version": "1.0.0",
     "description": "A near-black and a light scheme, a sidebar for every navigation, softer components and a split-screen sign-in, over classic.",
     "author": "Olivier DUTOIT",
@@ -23,13 +23,13 @@
                 "type": "color",
                 "label": "Primary colour",
                 "help": "Buttons, links and the start of the gradient.",
-                "token": "--portal-primary"
+                "token": "--nightfall-primary"
             },
             "accent": {
                 "type": "color",
                 "label": "Accent colour",
                 "help": "The end of the gradient and highlights.",
-                "token": "--portal-accent"
+                "token": "--nightfall-accent"
             },
             "logo": {
                 "type": "image",

@@ -21,7 +21,7 @@ const probe = () => <span>probe</span>;
 test('puts the brand, the search, the links and the user in a sidebar beside the page', () => {
     rendered = renderView('layout.app', { themes, fixture: 'admin' });
 
-    const sidebar = document.getElementById('portal-sidebar');
+    const sidebar = document.getElementById('nightfall-sidebar');
     const nav = screen.getByRole('navigation', { name: 'Main' });
 
     expect(nav.closest('aside')).toBe(sidebar);
@@ -44,7 +44,7 @@ test('keeps the slots around the main links', () => {
 });
 
 test("puts an area's pages first and folds the main links away at the foot of the sidebar", () => {
-    localStorage.removeItem('portal.sidebar.links-collapsed');
+    localStorage.removeItem('nightfall.sidebar.links-collapsed');
     rendered = renderView('layout.app', { themes, fixture: 'serverArea', slots: { 'nav.items.after': probe } });
 
     const server = screen.getByRole('navigation', { name: 'Server' });
@@ -55,31 +55,31 @@ test("puts an area's pages first and folds the main links away at the foot of th
     expect(fold.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(fold);
     expect(fold.getAttribute('aria-expanded')).toBe('false');
-    expect(document.getElementById('portal-main-links')?.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('nightfall-main-links')?.classList.contains('hidden')).toBe(true);
     // Folded, the links and the slots around them stay mounted.
     expect(main.textContent).toContain('probe');
-    expect(localStorage.getItem('portal.sidebar.links-collapsed')).toBe('1');
+    expect(localStorage.getItem('nightfall.sidebar.links-collapsed')).toBe('1');
 
     // The choice holds on the next page; the dashboard, with no area, always shows them.
     rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
     expect(screen.getByRole('button', { name: 'Panel' }).getAttribute('aria-expanded')).toBe('false');
     rendered = renderView('layout.app', { themes, fixture: 'user' });
     expect(screen.queryByRole('button', { name: 'Panel' })).toBeNull();
-    localStorage.removeItem('portal.sidebar.links-collapsed');
+    localStorage.removeItem('nightfall.sidebar.links-collapsed');
 });
 
 test('folds the sidebar into a rail of icons, the mark and the avatar, and remembers it', () => {
-    localStorage.removeItem('portal.sidebar.rail');
+    localStorage.removeItem('nightfall.sidebar.rail');
     rendered = renderView('layout.app', { themes, fixture: 'serverArea', slots: { 'server.navigation.after': probe } });
 
-    const sidebar = document.getElementById('portal-sidebar');
+    const sidebar = document.getElementById('nightfall-sidebar');
     const fold = screen.getByRole('button', { name: 'Collapse the sidebar' });
     expect(sidebar?.hasAttribute('data-rail')).toBe(false);
 
     fireEvent.click(fold);
     expect(sidebar?.hasAttribute('data-rail')).toBe(true);
     expect(sidebar?.className).toContain('lg:w-18');
-    expect(localStorage.getItem('portal.sidebar.rail')).toBe('1');
+    expect(localStorage.getItem('nightfall.sidebar.rail')).toBe('1');
 
     // Labels stay for screen readers and show as tooltips; the slots stay, told they are compact.
     const consoleLink = screen.getByRole('link', { name: 'Console' });
@@ -89,10 +89,10 @@ test('folds the sidebar into a rail of icons, the mark and the avatar, and remem
     expect(screen.getByTitle('Survival: Running')).toBeTruthy();
 
     rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
-    expect(document.getElementById('portal-sidebar')?.hasAttribute('data-rail')).toBe(true);
+    expect(document.getElementById('nightfall-sidebar')?.hasAttribute('data-rail')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Expand the sidebar' }));
-    expect(document.getElementById('portal-sidebar')?.hasAttribute('data-rail')).toBe(false);
-    localStorage.removeItem('portal.sidebar.rail');
+    expect(document.getElementById('nightfall-sidebar')?.hasAttribute('data-rail')).toBe(false);
+    localStorage.removeItem('nightfall.sidebar.rail');
 });
 
 test('gathers the file rows into one card', () => {

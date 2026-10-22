@@ -180,8 +180,8 @@ function writeFlag(key: string, value: boolean): void {
     }
 }
 
-const linksKey = 'portal.sidebar.links-collapsed';
-const railKey = 'portal.sidebar.rail';
+const linksKey = 'nightfall.sidebar.links-collapsed';
+const railKey = 'nightfall.sidebar.rail';
 
 /**
  * The dashboard, admin and account links with the slots around them. Inside an area they sit at the
@@ -202,7 +202,7 @@ function MainLinks({ model, foldable, rail }: { model: AppLayoutModel; foldable:
                 <button
                     type='button'
                     aria-expanded={!hidden}
-                    aria-controls='portal-main-links'
+                    aria-controls='nightfall-main-links'
                     onClick={toggle}
                     className={cn(
                         headingClass,
@@ -215,7 +215,7 @@ function MainLinks({ model, foldable, rail }: { model: AppLayoutModel; foldable:
                 </button>
             )}
             <div
-                id='portal-main-links'
+                id='nightfall-main-links'
                 className={cn('min-w-0 flex-col gap-0.5', hidden ? 'hidden lg:group-data-rail/sidebar:flex' : 'flex')}
             >
                 <div className='min-w-0 overflow-hidden'>
@@ -274,7 +274,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                 <button
                     type='button'
                     aria-expanded={open}
-                    aria-controls='portal-sidebar'
+                    aria-controls='nightfall-sidebar'
                     onClick={() => setOpen(true)}
                     className={iconButtonClass}
                 >
@@ -292,7 +292,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                 />
             )}
             <aside
-                id='portal-sidebar'
+                id='nightfall-sidebar'
                 data-rail={rail || undefined}
                 className={cn(
                     'group/sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
@@ -305,7 +305,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                 <button
                     type='button'
                     onClick={toggleRail}
-                    aria-controls='portal-sidebar'
+                    aria-controls='nightfall-sidebar'
                     aria-expanded={!rail}
                     title={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
                     className={cn(

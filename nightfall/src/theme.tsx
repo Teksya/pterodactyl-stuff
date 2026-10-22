@@ -9,7 +9,7 @@ import FileList from './views/FileList';
 const pages = () => import('./views/pages');
 
 /**
- * Classic's pages ("theme.extends") in Portal's frame: a sidebar that draws every area's navigation,
+ * Classic's pages ("theme.extends") in Nightfall's frame: a sidebar that draws every area's navigation,
  * softer skins for the UI kit, the file list and the activity log as cards, and the split-screen sign-in.
  */
 export default defineTheme({

@@ -7,7 +7,7 @@ each with its own manifest, version and README.
 | --- | --- | --- |
 | [`monaco`](monaco) | `monaco` | Replaces the file editor's code editor with Monaco, the editor of Visual Studio Code. |
 | [`turnstile`](turnstile) | `turnstile` | Replaces reCAPTCHA with Cloudflare Turnstile on the login, forgot password and password reset pages. |
-| [`portal`](portal) | `portal` | Theme: near-black and light schemes, a sidebar for every navigation, a split-screen sign-in. |
+| [`nightfall`](nightfall) | `nightfall` | Theme: near-black and light schemes, a sidebar for every navigation, a split-screen sign-in. |
 | [`security-keys`](security-keys) | `security-keys` | Sign in with a YubiKey or any FIDO2 / WebAuthn key, at the two-factor checkpoint or without a password. |
 
 ## Install

@@ -1,7 +1,7 @@
 import { skin, type ThemeSkins } from '@pterodactyl/sdk/theme';
 
 /**
- * Portal's look over classic's recipes: softer corners, sentence-case labels and quieter frames, as on
+ * Nightfall's look over classic's recipes: softer corners, sentence-case labels and quieter frames, as on
  * the sign-in pages. Each recipe extends classic's (`below`), so a class here replaces only the classic
  * class it conflicts with and every state classic handles keeps working.
  */

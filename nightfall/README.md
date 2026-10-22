@@ -1,4 +1,4 @@
-# Portal
+# Nightfall
 
 A Pterodactyl Panel 2.0 theme by Olivier DUTOIT. It gives the whole panel a modern look over
 classic's pages: a near-black (or light) palette, a sidebar that holds every navigation, softer
@@ -35,7 +35,7 @@ each field's own props onto its input.
 
 ### Settings
 
-On **Admin > Themes**, Portal's settings are:
+On **Admin > Themes**, Nightfall's settings are:
 
 | Setting | |
 | --- | --- |
@@ -56,11 +56,11 @@ inside each sign-in form that uses it.
 ## Why a theme
 
 The sign-in pages are shown to visitors who are not signed in, and the panel does not send an
-ordinary extension's view overrides to them, so only the active theme can redraw them. Portal is a
-theme (`"type": "theme"`) that extends classic: every page it leaves out is classic's, in Portal's
+ordinary extension's view overrides to them, so only the active theme can redraw them. Nightfall is a
+theme (`"type": "theme"`) that extends classic: every page it leaves out is classic's, in Nightfall's
 frame and skins.
 
-Only one theme is active at a time. To build Portal on another theme, change `theme.extends` in
+Only one theme is active at a time. To build Nightfall on another theme, change `theme.extends` in
 `extension.json` to that theme's id and rebuild.
 
 ## How it works
@@ -81,7 +81,7 @@ Only one theme is active at a time. To build Portal on another theme, change `th
 The entry holds only the skins, the sign-in layout and the area layouts, which import nothing but
 `@pterodactyl/sdk/theme`, so the first screen draws at once; the shell, the search and the sign-in
 forms load in chunks with their route. `src/theme.css` is the panel's stylesheet built with
-Portal's classes and its two palettes, in plain Tailwind.
+Nightfall's classes and its two palettes, in plain Tailwind.
 
 If a layer fails to render, the panel falls back to classic's. To see classic for one session,
 open any page with `?safe_mode=1`.
@@ -90,33 +90,34 @@ The texts are in English, like the rest of the panel.
 
 ## Install
 
-Upload `pterodactyl-portal-<version>.zip` in Admin → Extensions, or on the panel host:
+Upload `pterodactyl-nightfall-<version>.zip` in Admin → Extensions, or on the panel host:
 
 ```bash
-php artisan p:extension:install pterodactyl-portal-1.0.0.zip --enable --replace
-php artisan p:theme:activate portal
+php artisan p:extension:install pterodactyl-nightfall-1.0.0.zip --enable --replace
+php artisan p:theme:activate nightfall
 ```
 
 Or activate it on **Admin > Themes**, where **Preview for me** tries it without switching everyone.
 Reload the page afterwards. To go back to classic: `php artisan p:theme:reset`.
 
-Version 1.0.0 was an ordinary extension with the same id, which could not change the sign-in
-pages. If it is still installed, remove it first: `php artisan p:extension:remove portal`.
+Nightfall was called Portal (id `portal`) before. If Portal is installed, reset the theme and
+remove it first: `php artisan p:theme:reset`, then `php artisan p:extension:remove portal`.
+Settings (colours, logo, texts) do not carry over: set them again on **Admin > Themes**.
 
 ## Build
 
 The SDK is not published on npm yet, so the theme builds from a Panel 2.0 checkout
-(Node.js 22.12+), placed in `extensions/portal`:
+(Node.js 22.12+), placed in `extensions/nightfall`:
 
 ```bash
-cd extensions/portal
+cd extensions/nightfall
 npm install
 npm run typecheck
 npm test
 npm run build
 cd ../..
-php artisan p:extension:install extensions/portal --enable
-php artisan p:theme:activate portal
+php artisan p:extension:install extensions/nightfall --enable
+php artisan p:theme:activate nightfall
 ```
 
 At the panel's root, run `npm install` once first. The build reads `packages/sdk/core-classes.txt`
@@ -131,7 +132,7 @@ fails them.
 | --- | --- |
 | `extension.json` | Manifest: a theme extending classic, its schemes and settings |
 | `src/theme.tsx` | `defineTheme`: skins and views |
-| `src/theme.css` | The panel stylesheet with Portal's palettes, animations and dot grid |
+| `src/theme.css` | The panel stylesheet with Nightfall's palettes, animations and dot grid |
 | `src/skins.ts` | The UI kit recipes |
 | `src/views/Shell.tsx` | The sidebar shell |
 | `src/views/NavIcon.tsx` | Navigation icons by lucide name |
