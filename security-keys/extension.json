@@ -1,0 +1,38 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "security-keys",
+    "name": "Security Keys",
+    "version": "1.0.0",
+    "description": "Sign in with a hardware security key (YubiKey or any FIDO2 / WebAuthn authenticator) at the two-factor checkpoint, or without a password.",
+    "author": "Olivier DUTOIT",
+    "icon": "key-round",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\SecurityKeys\\SecurityKeysProvider",
+    "autoload": {
+        "OlivierDutoit\\SecurityKeys\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "sk",
+        "screens": [
+            {
+                "id": "keys",
+                "area": "account",
+                "path": "security-keys",
+                "nav": { "label": "Security Keys", "icon": "key-round" }
+            },
+            {
+                "id": "user-keys",
+                "area": "admin",
+                "parent": "admin.user",
+                "path": "security-keys",
+                "nav": { "label": "Security Keys", "icon": "key-round" }
+            }
+        ]
+    }
+}

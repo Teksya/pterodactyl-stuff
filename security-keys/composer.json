@@ -1,0 +1,17 @@
+{
+    "name": "olivierdutoit/pterodactyl-security-keys",
+    "description": "Hardware security key (FIDO2 / WebAuthn) sign-in for Pterodactyl Panel 2.0.",
+    "require": {
+        "php": "^8.3",
+        "ext-openssl": "*",
+        "lbuchs/webauthn": "^2.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "OlivierDutoit\\SecurityKeys\\": "src/"
+        }
+    },
+    "config": {
+        "autoloader-suffix": "OlivierDutoitSecurityKeysExtension"
+    }
+}

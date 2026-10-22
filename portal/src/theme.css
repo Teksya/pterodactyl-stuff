@@ -1,0 +1,103 @@
+/* The panel stylesheet with every class the panel uses, then Portal's own. Plain Tailwind: no prefix. */
+@import '@pterodactyl/sdk/theme-entry.css';
+
+@theme {
+    /* Classic's small corners (rounded-xs) on rows, chips and notices, softened with the rest. */
+    --radius-xs: calc(var(--radius) * 0.45);
+
+    --animate-rise: portal-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-drift: portal-drift 18s ease-in-out infinite alternate;
+
+    @keyframes portal-rise {
+        from {
+            opacity: 0;
+            transform: translateY(0.75rem);
+        }
+    }
+
+    @keyframes portal-drift {
+        to {
+            transform: translate3d(8%, -6%, 0) scale(1.15);
+        }
+    }
+}
+
+/* Both schemes. The colour settings write --portal-primary and --portal-accent. */
+:root {
+    --radius: 0.625rem;
+    --layout-sidebar-width: 17rem;
+    --primary: var(--portal-primary, oklch(0.58 0.19 259.8));
+    --accent: var(--portal-accent, oklch(0.715 0.126 215.2));
+    --ring: color-mix(in oklab, var(--primary) 70%, white);
+    --theme-color: oklch(0.145 0.004 260);
+
+    /* The console and the file editor stay dark in both schemes. */
+    --terminal-background: oklch(0.16 0.004 260);
+    --editor-background: oklch(0.16 0.004 260);
+    --editor-active-line: oklch(0.2 0.005 260);
+    --editor-border: oklch(0.27 0.006 260);
+    --editor-tooltip: oklch(0.21 0.005 260);
+    --editor-tooltip-border: oklch(0.3 0.007 260);
+    --editor-selection: color-mix(in oklab, var(--primary) 35%, oklch(0.16 0.004 260));
+}
+
+/* Dark: near black with a hint of blue, in place of classic's slate. */
+.dark {
+    --background: oklch(0.145 0.004 260);
+    --foreground: oklch(0.93 0.005 260);
+    --card: oklch(0.19 0.005 260);
+    --card-foreground: var(--foreground);
+    --popover: oklch(0.235 0.006 260);
+    --popover-foreground: var(--foreground);
+    --secondary: oklch(0.255 0.006 260);
+    --secondary-foreground: var(--foreground);
+    --muted: oklch(0.205 0.005 260);
+    --muted-foreground: oklch(0.66 0.012 260);
+    --sunken: oklch(0.165 0.004 260);
+    --border: oklch(0.28 0.006 260);
+    --input: oklch(0.17 0.004 260);
+    --input-border: oklch(0.31 0.007 260);
+    --primary: var(--portal-primary, oklch(0.58 0.19 259.8));
+    --primary-foreground: oklch(0.985 0.003 258);
+    --accent: var(--portal-accent, oklch(0.715 0.126 215.2));
+    --accent-foreground: oklch(0.985 0.003 258);
+    --sidebar: oklch(0.165 0.004 260);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+    --terminal-background: oklch(0.16 0.004 260);
+}
+
+/* Light: classic's light scaffold is provisional, so Portal sets its own. */
+.light {
+    --color-scheme: light;
+    --theme-color: oklch(1 0 0);
+    --background: oklch(0.975 0.004 258);
+    --foreground: oklch(0.21 0.01 260);
+    --card: oklch(1 0 0);
+    --card-foreground: var(--foreground);
+    --popover: oklch(0.965 0.005 258);
+    --popover-foreground: var(--foreground);
+    --secondary: oklch(0.935 0.006 258);
+    --secondary-foreground: var(--foreground);
+    --muted: oklch(0.955 0.005 258);
+    --muted-foreground: oklch(0.52 0.015 260);
+    --sunken: oklch(0.93 0.006 258);
+    --border: oklch(0.9 0.008 258);
+    --input: oklch(1 0 0);
+    --input-border: oklch(0.87 0.01 258);
+    --primary: var(--portal-primary, oklch(0.55 0.188 259.8));
+    --primary-foreground: oklch(0.985 0.003 258);
+    --accent: var(--portal-accent, oklch(0.62 0.12 220));
+    --accent-foreground: oklch(0.985 0.003 258);
+    --state-foreground: oklch(0.21 0.01 260);
+    --sidebar: oklch(1 0 0);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+}
+
+/* A faint dot grid over the brand half of the sign-in pages, fading out towards its foot. */
+@utility dots {
+    background-image: radial-gradient(currentColor 1px, transparent 1px);
+    background-size: 1.5rem 1.5rem;
+    mask-image: linear-gradient(to bottom, black, transparent 85%);
+}

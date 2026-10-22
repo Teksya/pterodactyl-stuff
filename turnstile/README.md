@@ -17,6 +17,11 @@ password and password reset pages.
   so the widget restarts after each submit (a wrong password gets a fresh challenge).
 - **Fallback.** Until both keys are set, or while the extension is disabled, the panel's own
   reCAPTCHA check runs unchanged.
+- **reCAPTCHA off.** Once both keys are set, the provider turns the panel's `recaptcha.enabled`
+  off for every request: the auth pages no longer load Google's script or badge, Admin →
+  Settings → Advanced shows reCAPTCHA disabled, and saving it enabled is refused with a
+  validation error. The stored setting is left untouched, so disabling the extension (or
+  clearing its keys) brings reCAPTCHA back as it was configured.
 
 ## Setup
 
@@ -25,8 +30,6 @@ password and password reset pages.
 3. Admin → Extensions → Cloudflare Turnstile: paste the **site key** and **secret key**, pick a
    widget theme, and keep **Verify hostname** on unless the panel is reached through several
    hostnames.
-4. Admin → Settings → Advanced: **disable reCAPTCHA**, so the login page no longer loads
-   Google's script. Turnstile keeps protecting the routes.
 
 ## Build and install
 
@@ -44,7 +47,7 @@ php artisan p:extension:install extensions/turnstile --enable
 ```
 
 A ready-to-install archive is attached to each GitHub release: upload it in Admin → Extensions,
-or run `php artisan p:extension:install turnstile-<version>.zip --enable`.
+or run `php artisan p:extension:install pterodactyl-turnstile-<version>.zip --enable`.
 
 ## Troubleshooting
 
@@ -57,7 +60,7 @@ or run `php artisan p:extension:install turnstile-<version>.zip --enable`.
 | File | Purpose |
 | --- | --- |
 | `extension.json` | Manifest: provider, autoload, Tailwind prefix `ts` |
-| `src/TurnstileProvider.php` | Settings and the middleware binding |
+| `src/TurnstileProvider.php` | Settings, the middleware binding, reCAPTCHA switch-off |
 | `src/Http/Middleware/VerifyTurnstile.php` | Server-side token verification |
 | `src/client/index.tsx` | Slots and the request interceptor |
 | `src/client/TurnstileWidget.tsx` | Loads and renders the widget |

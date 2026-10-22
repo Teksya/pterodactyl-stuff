@@ -1,0 +1,54 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "portal",
+    "type": "theme",
+    "name": "Portal",
+    "version": "1.0.0",
+    "description": "A near-black and a light scheme, a sidebar for every navigation, softer components and a split-screen sign-in, over classic.",
+    "author": "Olivier DUTOIT",
+    "icon": "log-in",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0"
+    },
+    "ui": {
+        "entry": "dist/client.js"
+    },
+    "theme": {
+        "extends": "classic",
+        "stylesheet": "dist/theme.css",
+        "schemes": ["dark", "light"],
+        "settings": {
+            "primary": {
+                "type": "color",
+                "label": "Primary colour",
+                "help": "Buttons, links and the start of the gradient.",
+                "token": "--portal-primary"
+            },
+            "accent": {
+                "type": "color",
+                "label": "Accent colour",
+                "help": "The end of the gradient and highlights.",
+                "token": "--portal-accent"
+            },
+            "logo": {
+                "type": "image",
+                "label": "Logo",
+                "help": "Shown in the sidebar and on the sign-in pages in place of the panel's name.",
+                "token": "--brand-logo"
+            },
+            "tagline": {
+                "type": "text",
+                "label": "Sign-in tagline",
+                "default": "Your servers, one sign-in away.",
+                "maxLength": 80
+            },
+            "subtitle": {
+                "type": "text",
+                "label": "Sign-in subtitle",
+                "default": "Start, watch and manage every server from a single place.",
+                "maxLength": 160
+            }
+        }
+    }
+}
