@@ -19,26 +19,6 @@ the panel host:
 php artisan p:extension:install pterodactyl-<id>-<version>.zip --enable --replace
 ```
 
-## Build
-
-The SDK is not published on npm yet: its `package.json` points at `../../packages/sdk`, so each
-package builds from a Panel 2.0 checkout (branch `2.0-develop`, Node.js 22.12+), copied to
-`extensions/<id>`:
-
-```bash
-npm ci --no-audit --no-fund --ignore-scripts   # at the panel root, once
-npm run sdk:testing                            # at the panel root, for the tests
-cd extensions/<id>
-npm install
-npm run typecheck
-npm test
-npm run build
-```
-
-Copy `dist/` back into the package's folder here, then `python scripts/pack.py <folder>` writes
-`pterodactyl-<id>-<version>.zip` at the repository root, as `php artisan p:extension:pack` would
-(no source maps). Zips and `dist/` are not committed.
-
 ## Versions and releases
 
 Each package is versioned on its own, in its `extension.json` and `package.json`. Releases are
