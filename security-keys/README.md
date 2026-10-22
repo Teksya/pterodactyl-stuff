@@ -48,16 +48,3 @@ needed. Requires PHP 8.3 with `openssl`.
 Locked out (key lost, no recovery code): an admin removes the key on the user's Security Keys
 tab, or `php artisan p:extension:disable security-keys` turns the extension off (key-only accounts
 then sign in with their password alone).
-
-## Build
-
-The SDK is not on npm, so build from a Panel 2.0 checkout, in `extensions/security-keys`:
-
-```bash
-npm install
-npm run typecheck
-npm test
-npm run build
-```
-
-`vendor/` is committed. To rebuild it: `composer install --no-dev`.

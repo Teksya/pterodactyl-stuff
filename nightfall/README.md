@@ -104,28 +104,6 @@ Nightfall was called Portal (id `portal`) before. If Portal is installed, reset 
 remove it first: `php artisan p:theme:reset`, then `php artisan p:extension:remove portal`.
 Settings (colours, logo, texts) do not carry over: set them again on **Admin > Themes**.
 
-## Build
-
-The SDK is not published on npm yet, so the theme builds from a Panel 2.0 checkout
-(Node.js 22.12+), placed in `extensions/nightfall`:
-
-```bash
-cd extensions/nightfall
-npm install
-npm run typecheck
-npm test
-npm run build
-cd ../..
-php artisan p:extension:install extensions/nightfall --enable
-php artisan p:theme:activate nightfall
-```
-
-At the panel's root, run `npm install` once first. The build reads `packages/sdk/core-classes.txt`
-(`node scripts/generate-core-classes.mjs` writes it in a fresh checkout), and `npm test` needs the
-SDK's test runtime (`npm run sdk:testing`). The tests render each view with the theme through
-`renderView`, from the view fixtures and models of their own, in strict mode, so a dropped slot
-fails them.
-
 ## Files
 
 | File | Purpose |

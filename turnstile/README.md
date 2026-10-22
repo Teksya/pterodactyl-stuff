@@ -31,23 +31,14 @@ password and password reset pages.
    widget theme, and keep **Verify hostname** on unless the panel is reached through several
    hostnames.
 
-## Build and install
+## Install
 
-The SDK is not published on npm yet, so the extension builds from a Panel 2.0 checkout
-(Node.js 22.12+), placed in `extensions/turnstile`:
+Upload `pterodactyl-turnstile-<version>.zip`, attached to each GitHub release, in Admin →
+Extensions, or on the panel host:
 
 ```bash
-cd extensions/turnstile
-npm install
-npm run typecheck
-npm test
-npm run build
-cd ../..
-php artisan p:extension:install extensions/turnstile --enable
+php artisan p:extension:install pterodactyl-turnstile-<version>.zip --enable --replace
 ```
-
-A ready-to-install archive is attached to each GitHub release: upload it in Admin → Extensions,
-or run `php artisan p:extension:install pterodactyl-turnstile-<version>.zip --enable`.
 
 ## Troubleshooting
 

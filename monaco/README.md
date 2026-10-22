@@ -46,24 +46,6 @@ php artisan p:extension:install pterodactyl-monaco-1.0.0.zip --enable --replace
 Reload the page after enabling, disabling or updating the extension. To go back to the panel's
 editor, disable it: `php artisan p:extension:disable monaco`.
 
-## Build
-
-The SDK is not published on npm yet, so the extension builds from a Panel 2.0 checkout
-(Node.js 22.12+), placed in `extensions/monaco`:
-
-```bash
-cd extensions/monaco
-npm install
-npm run typecheck
-npm test
-npm run build
-cd ../..
-php artisan p:extension:install extensions/monaco --enable
-```
-
-`npm test` needs the SDK's test runtime: run `npm install` and `npm run sdk:testing` once at the
-panel's root first.
-
 ## Files
 
 | File | Purpose |
