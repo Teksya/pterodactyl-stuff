@@ -9,6 +9,7 @@ each with its own manifest, version and README.
 | [`turnstile`](turnstile) | `turnstile` | Replaces reCAPTCHA with Cloudflare Turnstile on the login, forgot password and password reset pages. |
 | [`nightfall`](nightfall) | `nightfall` | Theme: near-black and light schemes, a sidebar for every navigation, a split-screen sign-in. |
 | [`security-keys`](security-keys) | `security-keys` | Sign in with a YubiKey or any FIDO2 / WebAuthn key, at the two-factor checkpoint or without a password. |
+| [`webhooks`](webhooks) | `webhooks` | Panel, server and account events to Discord, Slack, Teams, Telegram, ntfy, Gotify, Pushover, Matrix or any HTTP endpoint. |
 
 ## Install
 

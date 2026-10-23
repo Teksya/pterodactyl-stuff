@@ -1,0 +1,60 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "webhooks",
+    "name": "Webhooks",
+    "version": "1.0.0",
+    "description": "Send panel, server and account events to Discord, Slack, Teams, Telegram, ntfy, Gotify, Pushover, Matrix or any HTTP endpoint, with signed payloads, retries and a delivery log.",
+    "author": "Olivier DUTOIT",
+    "icon": "webhook",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\Webhooks\\WebhooksProvider",
+    "autoload": {
+        "OlivierDutoit\\Webhooks\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "wh",
+        "screens": [
+            {
+                "id": "admin-webhooks",
+                "area": "admin",
+                "path": "webhooks",
+                "nav": { "label": "Webhooks", "icon": "webhook" }
+            },
+            {
+                "id": "admin-server-webhooks",
+                "area": "admin",
+                "parent": "admin.server",
+                "path": "webhooks",
+                "nav": { "label": "Webhooks", "icon": "webhook" }
+            },
+            {
+                "id": "admin-user-webhooks",
+                "area": "admin",
+                "parent": "admin.user",
+                "path": "webhooks",
+                "nav": { "label": "Webhooks", "icon": "webhook" }
+            },
+            {
+                "id": "server-webhooks",
+                "area": "server",
+                "path": "webhooks",
+                "permission": ["ext.webhooks.read"],
+                "nav": { "label": "Webhooks", "icon": "webhook" },
+                "when": { "runtime": true }
+            },
+            {
+                "id": "account-webhooks",
+                "area": "account",
+                "path": "webhooks",
+                "nav": { "label": "Webhooks", "icon": "webhook" },
+                "when": { "runtime": true }
+            }
+        ]
+    }
+}
