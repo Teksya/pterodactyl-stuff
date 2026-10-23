@@ -3,10 +3,11 @@
 A Pterodactyl Panel 2.0 extension by Olivier DUTOIT. Users sign in with a hardware security key
 (YubiKey or any FIDO2 / WebAuthn authenticator, passkeys included):
 
-- **At the two-factor checkpoint.** "Use a security key" under the checkpoint form. The
-  authenticator app and the recovery codes keep working; a key is one more way through. An account
-  with a key and **no** authenticator app also gets a checkpoint after its password, answered
-  with the key (the prompt opens at once).
+- **At the two-factor checkpoint.** An account with a key gets a "Security key" screen after
+  its password, in place of the authenticator code form, and the key prompt opens at once. With
+  an authenticator app too, "Use my authenticator app or a recovery code" switches to the panel's
+  code form, where "Use a security key" brings the key back. An account with a key and **no**
+  authenticator app also gets this checkpoint (and no code form).
 - **Without a password** (optional, off by default). Admin → Extensions → Security Keys →
   *Passwordless sign-in* adds "Sign in with a security key" to the login page. Only passkeys
   that verify the user (PIN or biometrics) are accepted, and they stand for both factors. Tick
@@ -31,7 +32,10 @@ A Pterodactyl Panel 2.0 extension by Olivier DUTOIT. Users sign in with a hardwa
 - WebAuthn verification: [`lbuchs/webauthn`](https://github.com/lbuchs/WebAuthn) 2.2.0 (MIT, no
   dependencies) bundled in `vendor/`, autoloader suffix `OlivierDutoitSecurityKeysExtension`.
 - Sign-in pages are slots (`auth.checkpoint.after`, `auth.login.form.after`): plain extensions
-  cannot override guest views.
+  cannot override guest views. While the key's screen shows, the checkpoint slot hides the
+  panel's code form (its closest siblings holding a form, up to four levels above the slot) and
+  shows it again on request. The screen is drawn with the SDK's UI kit (`Empty`, `Button`,
+  `Alert`), so the active theme's skins style it.
 
 `APP_URL` must be the HTTPS address users open the panel at: keys registered on one hostname do
 not work on another.
@@ -39,7 +43,7 @@ not work on another.
 ## Install
 
 ```bash
-php artisan p:extension:install pterodactyl-security-keys-1.0.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-security-keys-1.0.1.zip --enable --replace
 ```
 
 Enabling runs `database/migrations` (table `security_key_credentials`); no `php artisan migrate`

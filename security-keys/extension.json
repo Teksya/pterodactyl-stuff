@@ -2,7 +2,7 @@
     "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
     "id": "security-keys",
     "name": "Security Keys",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Sign in with a hardware security key (YubiKey or any FIDO2 / WebAuthn authenticator) at the two-factor checkpoint, or without a password.",
     "author": "Olivier DUTOIT",
     "icon": "key-round",

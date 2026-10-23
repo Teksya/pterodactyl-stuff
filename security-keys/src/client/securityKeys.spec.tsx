@@ -102,28 +102,65 @@ test('stays hidden at the checkpoint of an account without keys', async () => {
     expect(container.innerHTML).toBe('');
 });
 
-test('answers the checkpoint with a key and follows the redirect', async () => {
+/** The slot beside a stand-in for the panel's checkpoint form, as the panel renders them. */
+function withCheckpointForm() {
+    return withHost(
+        <div>
+            <div data-testid='core-checkpoint'>
+                <form>
+                    <input name='code' aria-label='Authentication code' />
+                </form>
+            </div>
+            <CheckpointKey data={route} />
+        </div>,
+    );
+}
+
+test('asks for the key first, beside an authenticator app too, and follows the redirect', async () => {
     vi.mocked(api.checkpointOptions).mockResolvedValue({ public_key: { challenge: 'AQI' }, only_method: false });
     vi.mocked(api.answerCheckpoint).mockResolvedValue({ complete: true, intended: '/' });
     get.mockResolvedValue(new FakeCredential());
     withHost(<CheckpointKey data={route} />);
 
-    // Beside an authenticator app the key waits to be chosen.
-    fireEvent.click(await screen.findByRole('button', { name: /use a security key/i }));
-
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/server/abc'));
+    expect(get).toHaveBeenCalledTimes(1);
     expect(api.answerCheckpoint).toHaveBeenCalledWith('checkpoint-token', expect.objectContaining({ rawId: 'AQI' }));
+});
+
+test('stands in for the authenticator app’s form until the user switches to it, and back', async () => {
+    vi.mocked(api.checkpointOptions).mockResolvedValue({ public_key: { challenge: 'AQI' }, only_method: false });
+    get.mockRejectedValue(new DOMException('Cancelled.', 'NotAllowedError'));
+    withCheckpointForm();
+    const core = await screen.findByTestId('core-checkpoint');
+
+    const heading = await screen.findByRole('heading', { name: 'Security key' });
+    // Drawn with the UI kit, so the active theme's skins style it.
+    expect(heading.closest('[data-ui="empty"]')).not.toBeNull();
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    expect(core.style.display).toBe('none');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /use my authenticator app/i }));
+    expect(core.style.display).toBe('');
+    expect(screen.queryByRole('heading', { name: 'Security key' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /use a security key/i }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    expect(core.style.display).toBe('none');
 });
 
 test('asks for the key at once when it is the account’s only second factor, and shows a refusal', async () => {
     vi.mocked(api.checkpointOptions).mockResolvedValue({ public_key: { challenge: 'AQI' }, only_method: true });
     vi.mocked(api.answerCheckpoint).mockRejectedValue(new Error('The security key response is not valid.'));
     get.mockResolvedValue(new FakeCredential());
-    withHost(<CheckpointKey data={route} />);
+    withCheckpointForm();
 
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
     expect((await screen.findByRole('alert')).textContent).toBe('The security key response is not valid.');
     screen.getByText(/protected by a security key/i);
+    // No authenticator app to fall back on: its form stays hidden.
+    expect(screen.queryByRole('button', { name: /use my authenticator app/i })).toBeNull();
+    expect(screen.getByTestId('core-checkpoint').style.display).toBe('none');
     expect(assign).not.toHaveBeenCalled();
 });
 
