@@ -11,9 +11,11 @@ use OlivierDutoit\Webhooks\Console\MonitorCommand;
 use OlivierDutoit\Webhooks\Console\PruneCommand;
 use OlivierDutoit\Webhooks\Delivery\Dispatcher;
 use OlivierDutoit\Webhooks\Events\EventBuilder;
+use OlivierDutoit\Webhooks\Jobs\IngestedActivity;
 use OlivierDutoit\Webhooks\Jobs\ProcessActivity;
 use OlivierDutoit\Webhooks\Jobs\ProcessOperation;
 use OlivierDutoit\Webhooks\Targets\ProviderRegistry;
+use Pterodactyl\Contracts\Activity\IngestsActivityLogs;
 use Pterodactyl\Events\ActivityLogged;
 use Pterodactyl\Events\Extensions\ExtensionDisabled;
 use Pterodactyl\Events\Extensions\ExtensionEnabled;
@@ -68,6 +70,9 @@ class WebhooksProvider extends ExtensionProvider
                 ProcessActivity::dispatch((int) $event->model->id)->afterCommit();
             }
         });
+
+        // Wings' reports are written in bulk, without the event above.
+        $this->wrapAction(IngestsActivityLogs::class, fn (IngestsActivityLogs $inner): IngestsActivityLogs => new IngestedActivity($inner));
 
         $this->listenToServerOperations(function (OperationCompleted $operation): void {
             if ($this->active()) {

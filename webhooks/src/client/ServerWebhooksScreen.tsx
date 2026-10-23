@@ -10,8 +10,7 @@ export default function ServerWebhooksScreen(_props: ScreenComponentProps) {
             {uuid ? (
                 <WebhooksManager
                     context={{ kind: 'server', uuid }}
-                    intro='Send this server’s events (power, crashes, backups, console, files, subusers…) to Discord, Slack, Telegram or any HTTP endpoint.'
-                    emptyDescription='Create a webhook to be told when this server starts, crashes, finishes a backup and more.'
+                    emptyDescription='Create a webhook to send this server’s power, crash, backup, console and file events to Discord, Slack, Telegram or any HTTP endpoint.'
                 />
             ) : (
                 <Spinner size='large' centered />

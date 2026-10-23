@@ -89,28 +89,26 @@ export default function EventPicker({
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                     />
-                    <div className='wh:flex wh:flex-col wh:gap-4'>
+                    <div className='wh:flex wh:flex-col wh:gap-5'>
                         {groups.map((group) => {
                             const keys = group.events.map((event) => event.key);
                             const count = keys.filter((key) => selected.has(key)).length;
 
                             return (
-                                <fieldset key={group.id} className='wh:rounded-lg wh:border wh:border-border wh:p-3'>
-                                    <legend className='wh:px-1'>
-                                        <label className='wh:flex wh:cursor-pointer wh:items-center wh:gap-2 wh:text-sm wh:font-medium'>
-                                            <Checkbox
-                                                checked={count === keys.length}
-                                                indeterminate={count > 0 && count < keys.length}
-                                                onChange={(on) => setKeys(keys, on)}
-                                                aria-label={`All ${group.label} events`}
-                                            />
-                                            {group.label}
-                                            <span className='wh:text-xs wh:font-normal wh:text-muted-foreground'>
-                                                {count}/{keys.length}
-                                            </span>
-                                        </label>
-                                    </legend>
-                                    <div className='wh:grid wh:grid-cols-1 wh:gap-x-4 wh:gap-y-1.5 wh:sm:grid-cols-2'>
+                                <div key={group.id} role='group' aria-label={group.label}>
+                                    <label className='wh:mb-2 wh:flex wh:cursor-pointer wh:items-center wh:gap-2 wh:text-sm wh:font-medium'>
+                                        <Checkbox
+                                            checked={count === keys.length}
+                                            indeterminate={count > 0 && count < keys.length}
+                                            onChange={(on) => setKeys(keys, on)}
+                                            aria-label={`All ${group.label} events`}
+                                        />
+                                        {group.label}
+                                        <span className='wh:text-xs wh:font-normal wh:text-muted-foreground'>
+                                            {count}/{keys.length}
+                                        </span>
+                                    </label>
+                                    <div className='wh:grid wh:grid-cols-1 wh:gap-x-4 wh:gap-y-1.5 wh:pl-6 wh:sm:grid-cols-2'>
                                         {group.events.map((event) => (
                                             <label key={event.key} className='wh:flex wh:cursor-pointer wh:items-center wh:gap-2 wh:text-sm' title={event.key}>
                                                 <Checkbox checked={selected.has(event.key)} onChange={(on) => setKeys([event.key], on)} />
@@ -119,7 +117,7 @@ export default function EventPicker({
                                             </label>
                                         ))}
                                     </div>
-                                </fieldset>
+                                </div>
                             );
                         })}
                         {groups.length === 0 && <p className='wh:text-sm wh:text-muted-foreground'>No event matches “{search}”.</p>}

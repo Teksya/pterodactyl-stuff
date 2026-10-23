@@ -11,6 +11,7 @@ use OlivierDutoit\Webhooks\Http\EndpointService;
 use OlivierDutoit\Webhooks\Http\Owner;
 use OlivierDutoit\Webhooks\Models\Delivery;
 use OlivierDutoit\Webhooks\Models\Endpoint;
+use OlivierDutoit\Webhooks\Monitor\WingsDelay;
 use OlivierDutoit\Webhooks\Scope;
 use Pterodactyl\Models\Node;
 use Pterodactyl\Models\Server;
@@ -26,7 +27,12 @@ final class AdminWebhooksController
 
     public function meta(Request $request): JsonResponse
     {
-        return new JsonResponse(['data' => [...$this->service->meta($this->owner($request)), 'can_manage' => true, 'can_read_payloads' => true]]);
+        return new JsonResponse(['data' => [
+            ...$this->service->meta($this->owner($request)),
+            'can_manage' => true,
+            'can_read_payloads' => true,
+            'wings_delays' => WingsDelay::slowNodes(),
+        ]]);
     }
 
     /** The endpoints of the route's owner: the panel's, `/servers/{serverId}` or `/users/{userId}`. */

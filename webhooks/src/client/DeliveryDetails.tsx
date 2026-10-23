@@ -1,18 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Dialog, formatDate, httpErrorToHuman, Spinner, toast } from '@pterodactyl/sdk';
+import { Alert, Badge, Button, Card, Dialog, formatDate, httpErrorToHuman, Spinner, toast } from '@pterodactyl/sdk';
 import { getDelivery, redeliver, ROOT_KEY, type Context } from './api';
 import { deliveryLabel, deliveryTone } from './present';
 import type { Delivery } from './types';
 
+/** The theme's card around the text, which keeps only what a block of code needs. */
 function Block({ title, children }: { title: string; children: string }) {
     return (
-        <div className='wh:flex wh:min-w-0 wh:flex-col wh:gap-1'>
-            <p className='wh:text-xs wh:font-medium wh:uppercase wh:tracking-wide wh:text-muted-foreground'>{title}</p>
-            <pre className='wh:max-h-72 wh:overflow-auto wh:whitespace-pre-wrap wh:break-all wh:rounded-md wh:border wh:border-border wh:bg-background wh:p-3 wh:font-mono wh:text-xs'>
-                {children}
-            </pre>
-        </div>
+        <Card title={title}>
+            <pre className='wh:m-0 wh:max-h-72 wh:overflow-auto wh:whitespace-pre-wrap wh:break-all wh:font-mono wh:text-xs wh:leading-relaxed'>{children}</pre>
+        </Card>
     );
 }
 

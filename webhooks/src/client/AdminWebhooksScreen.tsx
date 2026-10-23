@@ -1,6 +1,15 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ContentBox, Input, Label, ListToolbar, type ScreenComponentProps } from '@pterodactyl/sdk';
+import {
+    Input,
+    Label,
+    ListToolbar,
+    PageContentBlock,
+    PageHeading,
+    SubNavigation,
+    type ScreenComponentProps,
+    type SubNavigationProps,
+} from '@pterodactyl/sdk';
 import { adminContextOf, deliveryLog, listAllEndpoints, ROOT_KEY } from './api';
 import DeliveriesView from './DeliveriesView';
 import DeliveryDetails from './DeliveryDetails';
@@ -10,15 +19,39 @@ import EndpointTable from './EndpointTable';
 import StatusFilter from './StatusFilter';
 import type { Delivery, DeliveryStatus, Endpoint } from './types';
 import WebhooksManager from './WebhooksManager';
+import WingsDelayNotice from './WingsDelayNotice';
 
-type Tab = 'panel' | 'server' | 'account' | 'log';
+type NavItem = SubNavigationProps['items'][number];
 
-const TABS: { id: Tab; label: string }[] = [
-    { id: 'panel', label: 'Panel' },
-    { id: 'server', label: 'Server webhooks' },
-    { id: 'account', label: 'Account webhooks' },
-    { id: 'log', label: 'Delivery log' },
+const tab = (screen: string, label: string, order: number): NavItem => ({
+    id: screen,
+    label,
+    destination: { extension: 'webhooks', screen },
+    icon: null,
+    group: null,
+    order,
+    exact: true,
+});
+
+// One screen each, so the panel's own sub-navigation draws them as it draws a node's or a server's tabs.
+export const TABS: NavItem[] = [
+    tab('admin-webhooks', 'Panel', 0),
+    tab('admin-webhooks-servers', 'Server webhooks', 1),
+    tab('admin-webhooks-accounts', 'Account webhooks', 2),
+    tab('admin-webhooks-log', 'Delivery log', 3),
 ];
+
+/** An admin page as the panel's own are laid out: heading, tabs, then the tab's content. */
+function AdminPage({ description, children }: { description: string; children: ReactNode }) {
+    return (
+        <PageContentBlock title='Admin · Webhooks'>
+            <PageHeading title='Webhooks' description={description} />
+            <WingsDelayNotice />
+            <SubNavigation className='wh:mb-6 wh:rounded-sm' items={TABS} />
+            {children}
+        </PageContentBlock>
+    );
+}
 
 /** Every server's or every account's webhooks, which root administrators can fix, turn off or remove. */
 function Overview({ scope }: { scope: 'server' | 'account' }) {
@@ -32,22 +65,15 @@ function Overview({ scope }: { scope: 'server' | 'account' }) {
     if (view.kind === 'deliveries') return <DeliveriesView context={adminContextOf(view.endpoint)} endpoint={view.endpoint} canManage onBack={back} />;
 
     return (
-        <ContentBox title={scope === 'server' ? 'Server webhooks' : 'Account webhooks'}>
-            <p className='wh:mb-4 wh:text-sm wh:text-muted-foreground'>
-                {scope === 'server'
-                    ? 'Webhooks server owners and subusers created for their servers. Each server’s are also on its Webhooks tab.'
-                    : 'Webhooks users created for their own accounts. Each user’s are also on their Webhooks tab.'}
-            </p>
-            <EndpointTable
-                endpoints={endpoints}
-                contextOf={adminContextOf}
-                canManage
-                showOwner
-                onEdit={onEdit}
-                onDeliveries={onDeliveries}
-                emptyDescription={scope === 'server' ? 'No server has a webhook yet.' : 'No user has an account webhook yet.'}
-            />
-        </ContentBox>
+        <EndpointTable
+            endpoints={endpoints}
+            contextOf={adminContextOf}
+            canManage
+            showOwner
+            onEdit={onEdit}
+            onDeliveries={onDeliveries}
+            emptyDescription={scope === 'server' ? 'No server has a webhook yet.' : 'No user has an account webhook yet.'}
+        />
     );
 }
 
@@ -65,7 +91,7 @@ function Log() {
     });
 
     return (
-        <ContentBox title='Delivery log'>
+        <>
             <ListToolbar summary={query.data ? `${query.data.meta.total} deliveries` : undefined}>
                 <div className='wh:w-56'>
                     <Label htmlFor='wh-log-event' className='wh:sr-only'>
@@ -98,45 +124,45 @@ function Log() {
                 emptyDescription='Deliveries of every webhook show here.'
             />
             <DeliveryDetails context={{ kind: 'admin' }} delivery={open} canManage onClose={() => setOpen(null)} />
-        </ContentBox>
+        </>
     );
 }
 
 /** Admin → Webhooks. */
 export default function AdminWebhooksScreen(_props: ScreenComponentProps) {
-    const [tab, setTab] = useState<Tab>('panel');
-
     return (
-        <div className='wh:flex wh:flex-col wh:gap-6'>
-            <div role='tablist' aria-label='Webhooks' className='wh:flex wh:flex-wrap wh:gap-1 wh:border-b wh:border-border'>
-                {TABS.map((item) => (
-                    <button
-                        key={item.id}
-                        type='button'
-                        role='tab'
-                        id={`wh-tab-${item.id}`}
-                        aria-selected={tab === item.id}
-                        aria-controls={`wh-panel-${item.id}`}
-                        onClick={() => setTab(item.id)}
-                        className={`wh:-mb-px wh:cursor-pointer wh:border-0 wh:border-b-2 wh:border-solid wh:bg-transparent wh:px-3 wh:py-2 wh:text-sm wh:font-medium ${
-                            tab === item.id ? 'wh:border-primary wh:text-foreground' : 'wh:border-transparent wh:text-muted-foreground wh:hover:text-foreground'
-                        }`}
-                    >
-                        {item.label}
-                    </button>
-                ))}
-            </div>
-            <div role='tabpanel' id={`wh-panel-${tab}`} aria-labelledby={`wh-tab-${tab}`}>
-                {tab === 'panel' && (
-                    <WebhooksManager
-                        context={{ kind: 'admin' }}
-                        intro='Panel-wide webhooks: any event of any server, user, node or extension, optionally limited to some nodes or servers.'
-                        emptyDescription='Create a webhook to send panel events to Discord, Slack, Teams, Telegram, ntfy or any HTTP endpoint.'
-                    />
-                )}
-                {(tab === 'server' || tab === 'account') && <Overview key={tab} scope={tab} />}
-                {tab === 'log' && <Log />}
-            </div>
-        </div>
+        <AdminPage description='Panel-wide webhooks: any event of any server, user, node or extension, optionally limited to some nodes or servers.'>
+            <WebhooksManager
+                context={{ kind: 'admin' }}
+                emptyDescription='Create a webhook to send panel events to Discord, Slack, Teams, Telegram, ntfy or any HTTP endpoint.'
+            />
+        </AdminPage>
+    );
+}
+
+/** Admin → Webhooks → Server webhooks. */
+export function AdminServersWebhooksScreen(_props: ScreenComponentProps) {
+    return (
+        <AdminPage description='Webhooks server owners and subusers created for their servers. Each server’s are also on its Webhooks tab.'>
+            <Overview scope='server' />
+        </AdminPage>
+    );
+}
+
+/** Admin → Webhooks → Account webhooks. */
+export function AdminAccountsWebhooksScreen(_props: ScreenComponentProps) {
+    return (
+        <AdminPage description='Webhooks users created for their own accounts. Each user’s are also on their Webhooks tab.'>
+            <Overview scope='account' />
+        </AdminPage>
+    );
+}
+
+/** Admin → Webhooks → Delivery log. */
+export function AdminDeliveryLogScreen(_props: ScreenComponentProps) {
+    return (
+        <AdminPage description='Every delivery of every webhook, newest first.'>
+            <Log />
+        </AdminPage>
     );
 }

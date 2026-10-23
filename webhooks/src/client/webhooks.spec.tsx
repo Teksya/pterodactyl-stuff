@@ -6,6 +6,8 @@ import { http } from '@pterodactyl/sdk/api';
 import { createExtensionTestHost, type ExtensionTestHost } from '@pterodactyl/sdk/testing';
 import extension from './index';
 import * as api from './api';
+import { TABS } from './AdminWebhooksScreen';
+import WingsDelayNotice from './WingsDelayNotice';
 import EndpointEditor from './EndpointEditor';
 import EventPicker from './EventPicker';
 import { endpointState, eventsSummary, isAllEvents, patternMatches } from './present';
@@ -233,11 +235,37 @@ test('switching service resets the settings to the new one’s fields', async ()
     expect(update.mock.calls[0][2]).toMatchObject({ provider: 'telegram', config: { bot_token: '123456:abc', silent: false } });
 });
 
+test('warns about nodes that report activity late, until ignored', async () => {
+    localStorage.clear();
+    vi.spyOn(api, 'getMeta').mockResolvedValue({ ...meta, scope: 'admin', wings_delays: [{ node_id: 1, node: 'fr-1', seconds: 58 }] });
+    withHost(<WingsDelayNotice />);
+
+    await screen.findByText(/fr-1 \(58 s\)/);
+    fireEvent.click(screen.getByRole('button', { name: 'Ignore' }));
+    expect(screen.queryByText(/fr-1/)).toBeNull();
+    expect(localStorage.getItem('webhooks:wings-delay-ignored')).toBe('1');
+});
+
 test('registers every screen, and hides server and account screens when turned off', () => {
     const register = vi.fn();
     extension.setup({ meta: { id: 'webhooks' }, config: {}, screens: { register }, slots: { register: vi.fn() } } as unknown as ExtensionSetupContext);
 
-    expect(register.mock.calls.map(([id]) => id)).toEqual(['admin-webhooks', 'admin-server-webhooks', 'admin-user-webhooks', 'server-webhooks', 'account-webhooks']);
+    // Each admin tab leads to one of these screens.
+    for (const item of TABS) {
+        expect(item.destination).toMatchObject({ extension: 'webhooks' });
+        expect(register.mock.calls.map(([id]) => id)).toContain('screen' in item.destination ? item.destination.screen : '');
+    }
+
+    expect(register.mock.calls.map(([id]) => id)).toEqual([
+        'admin-webhooks',
+        'admin-webhooks-servers',
+        'admin-webhooks-accounts',
+        'admin-webhooks-log',
+        'admin-server-webhooks',
+        'admin-user-webhooks',
+        'server-webhooks',
+        'account-webhooks',
+    ]);
 
     const visible = (id: string, config: Record<string, unknown>) =>
         (register.mock.calls.find(([screen]) => screen === id)?.[2] as { visible: (context: { config: Record<string, unknown> }) => boolean }).visible({ config });

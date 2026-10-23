@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { Button, ContentBox, ListToolbar } from '@pterodactyl/sdk';
+import { Button, ListToolbar } from '@pterodactyl/sdk';
 import { deliveriesKey, listDeliveries, type Context } from './api';
 import DeliveryDetails from './DeliveryDetails';
 import DeliveryTable from './DeliveryTable';
@@ -33,32 +33,29 @@ export default function DeliveriesView({
     });
 
     return (
-        <div className='wh:flex wh:flex-col wh:gap-6'>
-            <div className='wh:flex wh:items-center wh:gap-3'>
+        <div>
+            <div className='wh:mb-3'>
                 <Button.Text type='button' size='small' onClick={onBack}>
                     <ArrowLeft className='wh:size-4' aria-hidden />
                     Webhooks
                 </Button.Text>
-                <h2 className='wh:truncate wh:text-lg wh:font-semibold'>{endpoint.name}</h2>
             </div>
-            <ContentBox title='Delivery log'>
-                <ListToolbar summary={query.data ? `${query.data.meta.total} deliveries` : undefined}>
-                    <StatusFilter
-                        value={status}
-                        onChange={(next) => {
-                            setStatus(next);
-                            setPage(1);
-                        }}
-                    />
-                </ListToolbar>
-                <DeliveryTable
-                    page={query.data}
-                    fetching={query.isFetching}
-                    onPage={setPage}
-                    onOpen={canReadPayloads ? setOpen : undefined}
-                    emptyDescription='Events this webhook receives, and tests, show here.'
+            <ListToolbar summary={`Delivery log of ${endpoint.name}${query.data ? ` · ${query.data.meta.total} deliveries` : ''}`}>
+                <StatusFilter
+                    value={status}
+                    onChange={(next) => {
+                        setStatus(next);
+                        setPage(1);
+                    }}
                 />
-            </ContentBox>
+            </ListToolbar>
+            <DeliveryTable
+                page={query.data}
+                fetching={query.isFetching}
+                onPage={setPage}
+                onOpen={canReadPayloads ? setOpen : undefined}
+                emptyDescription='Events this webhook receives, and tests, show here.'
+            />
             <DeliveryDetails context={context} delivery={open} canManage={canManage} onClose={() => setOpen(null)} />
         </div>
     );

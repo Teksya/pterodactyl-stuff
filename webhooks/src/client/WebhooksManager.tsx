@@ -1,6 +1,6 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, ContentBox, ListToolbar, NewButton, Spinner } from '@pterodactyl/sdk';
+import { Alert, ListToolbar, NewButton, Spinner } from '@pterodactyl/sdk';
 import { endpointsKey, getMeta, listEndpoints, metaKey, type Context } from './api';
 import DeliveriesView from './DeliveriesView';
 import EndpointEditor from './EndpointEditor';
@@ -10,7 +10,7 @@ import type { Endpoint } from './types';
 type View = { kind: 'list' } | { kind: 'edit'; endpoint?: Endpoint } | { kind: 'deliveries'; endpoint: Endpoint };
 
 /** One owner's webhooks: the list, the editor and the delivery log, in place of each other. */
-export default function WebhooksManager({ context, intro, emptyDescription }: { context: Context; intro: ReactNode; emptyDescription: string }) {
+export default function WebhooksManager({ context, emptyDescription }: { context: Context; emptyDescription: string }) {
     const [view, setView] = useState<View>({ kind: 'list' });
     const { data: meta } = useQuery({ queryKey: metaKey(context), queryFn: () => getMeta(context) });
     const { data: endpoints } = useQuery({ queryKey: endpointsKey(context), queryFn: () => listEndpoints(context) });
@@ -27,26 +27,27 @@ export default function WebhooksManager({ context, intro, emptyDescription }: { 
     const full = meta.limit !== null && meta.count >= meta.limit;
 
     return (
-        <div className='wh:flex wh:flex-col wh:gap-6'>
-            {!meta.enabled && <Alert type='warning'>The administrator has turned these webhooks off: they keep their settings but receive nothing.</Alert>}
-            <ContentBox title='Webhooks'>
-                <p className='wh:mb-4 wh:text-sm wh:text-muted-foreground'>{intro}</p>
-                <ListToolbar summary={meta.limit !== null ? `${meta.count} of ${meta.limit} webhooks` : `${meta.count} webhook${meta.count === 1 ? '' : 's'}`}>
-                    {meta.can_manage && (
-                        <NewButton onClick={() => setView({ kind: 'edit' })} disabled={full || !meta.enabled || meta.providers.length === 0}>
-                            New webhook
-                        </NewButton>
-                    )}
-                </ListToolbar>
-                <EndpointTable
-                    endpoints={endpoints}
-                    contextOf={contextOf}
-                    canManage={meta.can_manage}
-                    onEdit={onEdit}
-                    onDeliveries={onDeliveries}
-                    emptyDescription={emptyDescription}
-                />
-            </ContentBox>
+        <div>
+            {!meta.enabled && (
+                <Alert type='warning' className='wh:mb-6'>
+                    The administrator has turned these webhooks off: they keep their settings but receive nothing.
+                </Alert>
+            )}
+            <ListToolbar summary={meta.limit !== null ? `${meta.count} of ${meta.limit} webhooks` : `${meta.count} webhook${meta.count === 1 ? '' : 's'}`}>
+                {meta.can_manage && (
+                    <NewButton onClick={() => setView({ kind: 'edit' })} disabled={full || !meta.enabled || meta.providers.length === 0}>
+                        New webhook
+                    </NewButton>
+                )}
+            </ListToolbar>
+            <EndpointTable
+                endpoints={endpoints}
+                contextOf={contextOf}
+                canManage={meta.can_manage}
+                onEdit={onEdit}
+                onDeliveries={onDeliveries}
+                emptyDescription={emptyDescription}
+            />
         </div>
     );
 }

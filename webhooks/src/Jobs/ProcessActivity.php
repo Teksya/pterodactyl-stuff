@@ -8,6 +8,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Cache;
 use OlivierDutoit\Webhooks\Delivery\Dispatcher;
 use OlivierDutoit\Webhooks\Events\EventBuilder;
 use Pterodactyl\Models\ActivityLog;
@@ -29,7 +30,18 @@ final class ProcessActivity implements ShouldQueue
 
     public function handle(EventBuilder $builder, Dispatcher $dispatcher): void
     {
-        $log = ActivityLog::query()->with(['subjects.subject', 'actor'])->find($this->activityId);
+        self::process($this->activityId, $builder, $dispatcher);
+    }
+
+    /** Queues the deliveries of one entry, once however many times it is reported. */
+    public static function process(int $activityId, EventBuilder $builder, Dispatcher $dispatcher): void
+    {
+        // An entry Wings reported may also reach the ActivityLogged listener: send it once.
+        if (! Cache::add('webhooks:activity:'.$activityId, true, 86400)) {
+            return;
+        }
+
+        $log = ActivityLog::query()->with(['subjects.subject', 'actor'])->find($activityId);
         if (! $log instanceof ActivityLog) {
             return;
         }

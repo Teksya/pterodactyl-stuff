@@ -1,4 +1,4 @@
-import { Spinner, useCurrentResource, type ScreenComponentProps } from '@pterodactyl/sdk';
+import { Spinner, TitledGreyBox, useCurrentResource, type ScreenComponentProps } from '@pterodactyl/sdk';
 import WebhooksManager from './WebhooksManager';
 
 /** Admin → Servers → a server → Webhooks: the server's own webhooks, as its owner sees them. */
@@ -8,11 +8,9 @@ export function AdminServerWebhooksScreen(_props: ScreenComponentProps) {
     if (!serverId) return <Spinner size='large' centered />;
 
     return (
-        <WebhooksManager
-            context={{ kind: 'admin-server', serverId }}
-            intro='The webhooks of this server, which its owner and subusers manage. Panel-wide webhooks are under Admin → Webhooks.'
-            emptyDescription='This server has no webhook.'
-        />
+        <TitledGreyBox title='Webhooks'>
+            <WebhooksManager context={{ kind: 'admin-server', serverId }} emptyDescription='This server has no webhook. Its owner and subusers manage them.' />
+        </TitledGreyBox>
     );
 }
 
@@ -23,10 +21,8 @@ export function AdminUserWebhooksScreen(_props: ScreenComponentProps) {
     if (!userId) return <Spinner size='large' centered />;
 
     return (
-        <WebhooksManager
-            context={{ kind: 'admin-user', userId }}
-            intro='The webhooks this user set up for the events of their account.'
-            emptyDescription='This user has no account webhook.'
-        />
+        <TitledGreyBox title='Webhooks'>
+            <WebhooksManager context={{ kind: 'admin-user', userId }} emptyDescription='This user has no account webhook.' />
+        </TitledGreyBox>
     );
 }

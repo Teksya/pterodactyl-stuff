@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Eye, History } from 'lucide-react';
 import {
     Badge,
+    Code,
     Empty,
     EmptyDescription,
     EmptyHeader,
@@ -62,8 +63,8 @@ export default function DeliveryTable({
                 id: 'event',
                 label: 'Event',
                 cell: (delivery) => (
-                    <span className='wh:flex wh:items-center wh:gap-2'>
-                        <code className='wh:truncate wh:font-mono wh:text-xs'>{delivery.event}</code>
+                    <span className='wh:flex wh:min-w-0 wh:items-center wh:gap-2'>
+                        <Code className='wh:truncate wh:text-xs'>{delivery.event}</Code>
                         {delivery.is_test && (
                             <Badge size='sm' tone='accent'>
                                 Test

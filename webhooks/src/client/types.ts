@@ -49,6 +49,15 @@ export interface Meta {
     can_manage: boolean;
     /** Server subusers without the panel's activity permission see the log, not what deliveries carried. */
     can_read_payloads: boolean;
+    /** Admin only: the nodes whose Wings reports server activity late, slowest first. */
+    wings_delays?: WingsDelay[];
+}
+
+export interface WingsDelay {
+    node_id: number;
+    node: string;
+    /** The longest a recent report held an event. */
+    seconds: number;
 }
 
 export interface Filters {

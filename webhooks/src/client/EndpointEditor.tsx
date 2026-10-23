@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { Button, ContentBox, httpErrorToHuman, Input, Label, Select, Spinner, Switch, TextArea, toast } from '@pterodactyl/sdk';
+import { Button, httpErrorToHuman, Input, Label, Select, Spinner, Switch, TextArea, TitledGreyBox, toast } from '@pterodactyl/sdk';
 import { createEndpoint, getMeta, getTargets, metaKey, ROOT_KEY, updateEndpoint, validationErrors, type Context } from './api';
 import EventPicker from './EventPicker';
 import { MASK, type Endpoint, type FieldSpec, type Filters, type Meta, type ProviderSpec } from './types';
@@ -47,6 +47,7 @@ function ConfigField({
                 <TextArea
                     id={id}
                     rows={field.type === 'headers' ? 3 : 6}
+                    $hasError={!!error}
                     className='wh:font-mono wh:text-xs'
                     value={text}
                     placeholder={saved ? '••••••••' : field.placeholder}
@@ -57,6 +58,7 @@ function ConfigField({
                 <Input
                     id={id}
                     type={field.secret ? 'password' : 'text'}
+                    $hasError={!!error}
                     autoComplete='off'
                     value={text}
                     placeholder={saved ? '••••••••' : field.placeholder}
@@ -154,80 +156,80 @@ function EditorForm({ context, meta, endpoint, onClose }: { context: Context; me
     const eventsError = errors.events ?? Object.entries(errors).find(([key]) => key.startsWith('events.'))?.[1];
 
     return (
-        <form onSubmit={(event) => void submit(event)} className='wh:flex wh:flex-col wh:gap-6'>
-            <div className='wh:flex wh:items-center wh:gap-3'>
+        <div>
+            <div className='wh:mb-3'>
                 <Button.Text type='button' size='small' onClick={onClose}>
                     <ArrowLeft className='wh:size-4' aria-hidden />
                     Webhooks
                 </Button.Text>
-                <h2 className='wh:text-lg wh:font-semibold'>{endpoint ? `Edit ${endpoint.name}` : 'New webhook'}</h2>
             </div>
-
-            <ContentBox title='Destination'>
-                <div className='wh:flex wh:flex-col wh:gap-4'>
-                    <div className='wh:grid wh:grid-cols-1 wh:gap-4 wh:md:grid-cols-2'>
-                        <div>
-                            <Label htmlFor='wh-name'>
-                                Name<span className='wh:text-destructive'> *</span>
-                            </Label>
-                            <Input id='wh-name' value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder='#alerts on Discord' />
-                            {errors.name && <p className='wh:mt-1 wh:text-xs wh:text-destructive'>{errors.name}</p>}
+            <form onSubmit={(event) => void submit(event)} className='wh:flex wh:flex-col wh:gap-6'>
+                <TitledGreyBox title={endpoint ? `Edit ${endpoint.name}` : 'New webhook'}>
+                    <div className='wh:flex wh:flex-col wh:gap-4'>
+                        <div className='wh:grid wh:grid-cols-1 wh:gap-4 wh:md:grid-cols-2'>
+                            <div>
+                                <Label htmlFor='wh-name'>
+                                    Name<span className='wh:text-destructive'> *</span>
+                                </Label>
+                                <Input id='wh-name' $hasError={!!errors.name} value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder='#alerts on Discord' />
+                                {errors.name && <p className='wh:mt-1 wh:text-xs wh:text-destructive'>{errors.name}</p>}
+                            </div>
+                            <div>
+                                <Label htmlFor='wh-provider'>Service</Label>
+                                <Select
+                                    id='wh-provider'
+                                    value={providerId}
+                                    options={meta.providers.map((item) => ({ value: item.id, label: item.label }))}
+                                    onChange={(next) => chooseProvider(String(next))}
+                                    hasError={!!errors.provider}
+                                />
+                                {errors.provider && <p className='wh:mt-1 wh:text-xs wh:text-destructive'>{errors.provider}</p>}
+                            </div>
                         </div>
-                        <div>
-                            <Label htmlFor='wh-provider'>Service</Label>
-                            <Select
-                                id='wh-provider'
-                                value={providerId}
-                                options={meta.providers.map((item) => ({ value: item.id, label: item.label }))}
-                                onChange={(next) => chooseProvider(String(next))}
-                                hasError={!!errors.provider}
+                        {provider?.description && <p className='wh:text-sm wh:text-muted-foreground'>{provider.description}</p>}
+                        {provider?.fields.map((field) => (
+                            <ConfigField
+                                key={`${provider.id}-${field.key}`}
+                                field={field}
+                                value={config[field.key]}
+                                error={errors[`config.${field.key}`] ?? (field.key === 'url' ? errors.config : undefined)}
+                                onChange={(value) => setConfig((current) => ({ ...current, [field.key]: value }))}
                             />
-                            {errors.provider && <p className='wh:mt-1 wh:text-xs wh:text-destructive'>{errors.provider}</p>}
-                        </div>
+                        ))}
+                        {!provider?.fields.some((field) => field.key === 'url') && errors['config.url'] && (
+                            <p role='alert' className='wh:text-sm wh:text-destructive'>
+                                {errors['config.url']}
+                            </p>
+                        )}
+                        {!meta.private_targets && (
+                            <p className='wh:text-xs wh:text-muted-foreground'>Addresses on private networks are refused on this panel.</p>
+                        )}
                     </div>
-                    {provider?.description && <p className='wh:text-sm wh:text-muted-foreground'>{provider.description}</p>}
-                    {provider?.fields.map((field) => (
-                        <ConfigField
-                            key={`${provider.id}-${field.key}`}
-                            field={field}
-                            value={config[field.key]}
-                            error={errors[`config.${field.key}`] ?? (field.key === 'url' ? errors.config : undefined)}
-                            onChange={(value) => setConfig((current) => ({ ...current, [field.key]: value }))}
-                        />
-                    ))}
-                    {!provider?.fields.some((field) => field.key === 'url') && errors['config.url'] && (
-                        <p role='alert' className='wh:text-sm wh:text-destructive'>
-                            {errors['config.url']}
-                        </p>
-                    )}
-                    {!meta.private_targets && (
-                        <p className='wh:text-xs wh:text-muted-foreground'>Addresses on private networks are refused on this panel.</p>
-                    )}
+                </TitledGreyBox>
+
+                <TitledGreyBox title='Events'>
+                    <EventPicker scope={meta.scope} meta={meta} value={events} onChange={setEvents} error={eventsError} />
+                </TitledGreyBox>
+
+                {meta.scope === 'admin' && (
+                    <TitledGreyBox title='Filters'>
+                        <FilterFields value={filters} onChange={setFilters} />
+                    </TitledGreyBox>
+                )}
+
+                <div className='wh:flex wh:flex-col wh:gap-4 wh:sm:flex-row wh:sm:items-center wh:sm:justify-between'>
+                    <Switch checked={enabled} onChange={setEnabled} label='Active' description='Turned off, the webhook keeps its settings and receives nothing.' />
+                    <div className='wh:flex wh:gap-3 wh:sm:justify-end'>
+                        <Button type='button' isSecondary onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button type='submit' isLoading={busy} disabled={!name.trim() || !providerId || events.length === 0}>
+                            {endpoint ? 'Save' : 'Create webhook'}
+                        </Button>
+                    </div>
                 </div>
-            </ContentBox>
-
-            <ContentBox title='Events'>
-                <EventPicker scope={meta.scope} meta={meta} value={events} onChange={setEvents} error={eventsError} />
-            </ContentBox>
-
-            {meta.scope === 'admin' && (
-                <ContentBox title='Filters'>
-                    <FilterFields value={filters} onChange={setFilters} />
-                </ContentBox>
-            )}
-
-            <div className='wh:flex wh:flex-col wh:gap-4 wh:sm:flex-row wh:sm:items-center wh:sm:justify-between'>
-                <Switch checked={enabled} onChange={setEnabled} label='Active' description='Turned off, the webhook keeps its settings and receives nothing.' />
-                <div className='wh:flex wh:gap-3 wh:sm:justify-end'>
-                    <Button type='button' isSecondary onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button type='submit' isLoading={busy} disabled={!name.trim() || !providerId || events.length === 0}>
-                        {endpoint ? 'Save' : 'Create webhook'}
-                    </Button>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     );
 }
 

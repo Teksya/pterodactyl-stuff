@@ -27,6 +27,21 @@
                 "nav": { "label": "Webhooks", "icon": "webhook" }
             },
             {
+                "id": "admin-webhooks-servers",
+                "area": "admin",
+                "path": "webhooks/servers"
+            },
+            {
+                "id": "admin-webhooks-accounts",
+                "area": "admin",
+                "path": "webhooks/accounts"
+            },
+            {
+                "id": "admin-webhooks-log",
+                "area": "admin",
+                "path": "webhooks/log"
+            },
+            {
                 "id": "admin-server-webhooks",
                 "area": "admin",
                 "parent": "admin.server",

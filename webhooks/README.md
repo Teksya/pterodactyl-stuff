@@ -33,6 +33,10 @@ Every entry of the panel's activity log (about 150 keys, such as `server:power.s
 | `node:unreachable`, `node:reachable` (admin) | The monitor |
 | `extension:installed`, `.enabled`, `.disabled`, `.removed`, `.failed` (admin) | Extension lifecycle |
 
+The activity Wings reports (power and commands sent from the console, SFTP) is written in bulk,
+without the event the activity log raises, so the extension wraps the panel's ingestion of it to
+catch these entries too. See [Faster events from Wings](#faster-events-from-wings).
+
 A webhook subscribes to single events, whole groups, patterns such as `server:backup.*` (also
 for activity other extensions log), or every event its scope can receive.
 
@@ -43,6 +47,32 @@ backup restore logged in the last few minutes is reported as `server:state.crash
 task from a schedule that ran in that time counts as a stop on purpose too. Resource
 alerts fire once when usage crosses the threshold (a percentage of the server's limit) and again
 only after it fell 10 points below. Servers without a limit are not checked for that resource.
+
+## Faster events from Wings
+
+Power actions sent from the console, console commands, SFTP and the file operations Wings does
+itself reach the panel through Wings' activity reports, which it sends in batches every
+`system.activity_send_interval` seconds: **60 by default**, so webhooks hear of these events up
+to a minute late. Events the panel logs itself (power from the API or a schedule, backups,
+settings, subusers...) are not delayed.
+
+To send them within a few seconds, set the interval in `/etc/pterodactyl/config.yml` on each
+node, under the existing `system:` section:
+
+```yaml
+system:
+  activity_send_interval: 5
+```
+
+then restart Wings:
+
+```bash
+systemctl restart wings
+```
+
+Each report's oldest event tells how long Wings held it. When a node's recent reports held
+events more than 20 seconds, **Admin → Webhooks** shows a warning naming the node and the delay,
+which an administrator can ignore (in that browser, until another node reports late).
 
 ## Payload
 
