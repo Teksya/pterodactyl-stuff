@@ -1,0 +1,24 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "server-organizer",
+    "name": "Server Organizer",
+    "version": "1.0.0",
+    "description": "Organise the dashboard's servers your way: folders with drag and drop, grouping by node, location or egg, owned or shared filters, and your own order.",
+    "author": "Olivier DUTOIT",
+    "icon": "folder-tree",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\ServerOrganizer\\ServerOrganizerProvider",
+    "autoload": {
+        "OlivierDutoit\\ServerOrganizer\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "so",
+        "views": ["dashboard.serverList"]
+    }
+}
