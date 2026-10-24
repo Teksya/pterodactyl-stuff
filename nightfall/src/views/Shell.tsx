@@ -1,324 +1,23 @@
-import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, Monitor, Moon, Sun, X } from 'lucide-react';
-import { Avatar, DropdownMenu, PanelLink, SpinnerOverlay, usePanelLocation } from '@pterodactyl/sdk';
-import {
-    Main,
-    Navigation,
-    NavigationLink,
-    Slot,
-    View,
-    cn,
-    useActiveNavItem,
-    type AccountArea,
-    type AdminArea,
-    type AppArea,
-    type AppLayoutModel,
-    type NavItem,
-    type ServerArea,
-    type ViewProps,
-} from '@pterodactyl/sdk/theme';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, LogOut, Menu, X } from 'lucide-react';
+import { Avatar, PanelLink, SpinnerOverlay, usePanelLocation } from '@pterodactyl/sdk';
+import { Main, View, cn, type ViewProps } from '@pterodactyl/sdk/theme';
 import Brand from './Brand';
-import NavIcon from './NavIcon';
-import ServerSwitcher, { states } from './ServerSwitcher';
+import AreaNav from './sidebar/AreaNav';
+import MainLinks from './sidebar/MainLinks';
+import SchemeMenu from './sidebar/SchemeMenu';
+import { readFlag, writeFlag } from './sidebar/storage';
+import { iconButtonClass, railCentered, railSrOnly, scrollerClass } from './sidebar/styles';
 
-type Area = AccountArea | ServerArea | AdminArea;
-
-/*
- * Folded into a rail (`data-rail` on the sidebar, from the `lg` breakpoint), the sidebar keeps its
- * icons, the mark and the avatar: labels stay for screen readers, headings and the rest go.
- */
-const railSrOnly = 'lg:group-data-rail/sidebar:sr-only';
-const railHidden = 'lg:group-data-rail/sidebar:hidden';
-const railCentered = 'lg:group-data-rail/sidebar:justify-center lg:group-data-rail/sidebar:px-0';
-
-/** A link of the sidebar; the active one is tinted with the primary colour, its icon in full. */
-const itemClass = [
-    'flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium no-underline',
-    railCentered,
-    'text-muted-foreground transition-colors hover:bg-popover/70 hover:text-foreground',
-    'data-[status=active]:bg-primary/12 data-[status=active]:text-foreground data-[status=active]:[&_svg]:text-primary',
-    'focus-visible:outline-2 focus-visible:outline-ring',
-].join(' ');
-
-const iconButtonClass = [
-    'flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0',
-    'text-muted-foreground transition-colors hover:bg-popover/70 hover:text-foreground',
-    'focus-visible:outline-2 focus-visible:outline-ring',
-].join(' ');
-
-/** A thin scrollbar that shows only while the pointer is over the sidebar, or focus is in it. */
-const scrollerClass = [
-    '[scrollbar-width:thin] [scrollbar-color:transparent_transparent]',
-    'group-hover/sidebar:[scrollbar-color:var(--border)_transparent] focus-within:[scrollbar-color:var(--border)_transparent]',
-    '[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-transparent',
-    'group-hover/sidebar:[&::-webkit-scrollbar-thumb]:bg-border',
-].join(' ');
-
-const headingClass ='px-3 pb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/70';
-
-/** The slots of an area's navigation, which its own layout renders in classic. */
-function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; compact: boolean }) {
-    if (area.kind === 'server') return <Slot name={`server.navigation.${at}`} data={area.server} compact={compact} />;
-    if (area.kind === 'account') return <Slot name={`account.navigation.${at}`} compact={compact} />;
-
-    return <Slot name={`panel.navigation.${at}`} compact={compact} />;
-}
-
-const noItems: readonly NavItem[] = [];
-
-/** The groups of an area folded in this browser, by name. */
-function useFoldedGroups(area: AppArea['kind']) {
-    const key = `nightfall:folded-groups:${area}`;
-    const read = (): string[] => {
-        try {
-            const value = JSON.parse(localStorage.getItem(key) ?? '[]');
-
-            return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-        } catch {
-            return [];
-        }
-    };
-    const [folded, setFolded] = useState(read);
-    useEffect(() => setFolded(read()), [key]);
-
-    const toggle = (group: string) =>
-        setFolded((current) => {
-            const next = current.includes(group) ? current.filter((item) => item !== group) : [...current, group];
-            try {
-                localStorage.setItem(key, JSON.stringify(next));
-            } catch {
-                // Kept in memory only.
-            }
-
-            return next;
-        });
-
-    return { folded, toggle };
-}
-
-/**
- * The pages of the area the user is in. Where a group of items starts, a heading that folds the
- * group; the group of the page in view stays open, and the rail shows every item.
- */
-function AreaNav({ area, rail }: { area: AppArea; rail: boolean }) {
-    const items: readonly NavItem[] =
-        area.kind === 'dashboard' ? noItems : area.kind === 'server' && area.adminLink ? [...area.nav.items, area.adminLink] : area.nav.items;
-    const current = useActiveNavItem(items);
-    const { folded, toggle } = useFoldedGroups(area.kind);
-
-    if (area.kind === 'dashboard') return null;
-
-    const label = { server: 'Server', account: 'Account', admin: 'Administration' }[area.kind];
-    const groupStarts = new Set(items.filter((item, index) => item.group && item.group !== items[index - 1]?.group));
-    const state = area.kind === 'server' && area.state ? states[area.state] : null;
-    const isFolded = (group: string | null) => !rail && group !== null && group !== current?.group && folded.includes(group);
-
-    return (
-        <nav aria-label={label} className='flex min-w-0 flex-col gap-0.5'>
-            {area.kind === 'server' ? (
-                <>
-                    {/* The whole card opens the server menu. */}
-                    <ServerSwitcher
-                        area={area}
-                        triggerClassName={cn(
-                            'group/server mb-2 flex w-full cursor-pointer items-center gap-2 rounded-xl border-0 bg-card py-2.5 pr-3 pl-3 text-left ring-1 ring-border',
-                            'transition-colors hover:bg-popover focus-visible:outline-2 focus-visible:outline-ring data-popup-open:bg-popover',
-                            railHidden
-                        )}
-                        triggerContent={
-                            <>
-                                <span className='min-w-0 flex-1'>
-                                    <span className='block truncate text-sm font-semibold text-foreground'>{area.name}</span>
-                                    <span className='mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground'>
-                                        <span aria-hidden className={cn('size-2 rounded-full', state?.dot ?? 'bg-muted-foreground/50')} />
-                                        {state?.label ?? 'Unknown'}
-                                    </span>
-                                </span>
-                                <ChevronDown
-                                    aria-hidden
-                                    className='size-4 shrink-0 text-muted-foreground transition-transform group-hover/server:text-foreground group-data-popup-open/server:rotate-180'
-                                />
-                                <span className='sr-only'>Switch server</span>
-                            </>
-                        }
-                    />
-                    {/* In the rail: the server's initial, with its state as a dot, opens the same menu. */}
-                    <ServerSwitcher
-                        area={area}
-                        triggerClassName={cn(
-                            'relative mx-auto mb-2 hidden size-10 cursor-pointer rounded-xl border-0 bg-card p-0 text-sm font-semibold text-foreground ring-1 ring-border',
-                            'transition-colors hover:bg-popover focus-visible:outline-2 focus-visible:outline-ring lg:group-data-rail/sidebar:flex'
-                        )}
-                        triggerContent={
-                            <span title={`${area.name}: ${state?.label ?? 'Unknown'}`} className='flex size-full items-center justify-center'>
-                                <span aria-hidden>{area.name.trim().charAt(0).toUpperCase() || '?'}</span>
-                                <span className='sr-only'>Switch server</span>
-                                <span
-                                    aria-hidden
-                                    className={cn('absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-sidebar', state?.dot ?? 'bg-muted-foreground')}
-                                />
-                            </span>
-                        }
-                    />
-                </>
-            ) : (
-                <p className={cn(headingClass, railHidden)}>{label}</p>
-            )}
-            <div className='min-w-0 overflow-hidden'>
-                <AreaSlot area={area} at='before' compact={rail} />
-            </div>
-            <Navigation items={items}>
-                {(item, { badge }) => (
-                    <>
-                        {groupStarts.has(item) && item.group && (
-                            <>
-                                <button
-                                    type='button'
-                                    aria-expanded={!isFolded(item.group)}
-                                    onClick={() => toggle(item.group!)}
-                                    className={cn(
-                                        headingClass,
-                                        'mt-3 flex w-full cursor-pointer items-center gap-1 border-0 bg-transparent pt-0 text-left hover:text-foreground',
-                                        railHidden
-                                    )}
-                                >
-                                    <span className='min-w-0 flex-1 truncate'>{item.group}</span>
-                                    <ChevronDown aria-hidden className={cn('size-3.5 shrink-0 transition-transform', isFolded(item.group) && '-rotate-90')} />
-                                </button>
-                                <hr aria-hidden className='mx-2 my-2 hidden border-sidebar-border lg:group-data-rail/sidebar:block' />
-                            </>
-                        )}
-                        {!isFolded(item.group) && (
-                            <NavigationLink item={item} title={rail ? item.label : undefined} className={itemClass}>
-                                <NavIcon name={item.icon} />
-                                <span className={cn('min-w-0 flex-1 truncate', railSrOnly)}>{item.label}</span>
-                                <span className={railHidden}>{badge}</span>
-                            </NavigationLink>
-                        )}
-                    </>
-                )}
-            </Navigation>
-            <div className='min-w-0 overflow-hidden'>
-                <AreaSlot area={area} at='after' compact={rail} />
-            </div>
-        </nav>
-    );
-}
-
-const schemeIcons = { dark: Moon, light: Sun, system: Monitor } as const;
-const schemeLabels = { dark: 'Dark', light: 'Light', system: 'System' } as const;
-
-/** Only rendered when the theme offers more than one scheme. */
-function SchemeMenu({ model, setScheme }: { model: AppLayoutModel; setScheme: NonNullable<AppLayoutModel['setScheme']> }) {
-    const Current = schemeIcons[model.scheme];
-
-    return (
-        <DropdownMenu
-            triggerClassName={iconButtonClass}
-            triggerContent={
-                <>
-                    <Current aria-hidden className='size-4' />
-                    <span className='sr-only'>Color scheme</span>
-                </>
-            }
-        >
-            {[...model.schemes, 'system' as const].map((scheme) => (
-                <DropdownMenu.Item
-                    key={scheme}
-                    icon={schemeIcons[scheme]}
-                    checked={scheme === model.preference}
-                    onClick={() => setScheme(scheme)}
-                >
-                    {schemeLabels[scheme]}
-                </DropdownMenu.Item>
-            ))}
-        </DropdownMenu>
-    );
-}
-
-/** A choice kept in the browser; without storage it lasts until the next page load. */
-function readFlag(key: string): boolean {
-    try {
-        return localStorage.getItem(key) === '1';
-    } catch {
-        return false;
-    }
-}
-
-function writeFlag(key: string, value: boolean): void {
-    try {
-        localStorage.setItem(key, value ? '1' : '0');
-    } catch {
-        // Kept in memory only.
-    }
-}
-
-const linksKey = 'nightfall.sidebar.links-collapsed';
 const railKey = 'nightfall.sidebar.rail';
-
-/**
- * The dashboard, admin and account links with the slots around them. Inside an area they sit at the
- * foot of the sidebar, under the area's own pages, and fold away behind their heading.
- */
-function MainLinks({ model, foldable, rail }: { model: AppLayoutModel; foldable: boolean; rail: boolean }) {
-    const [collapsed, setCollapsed] = useState(() => readFlag(linksKey));
-    // The rail has no heading to unfold them from, so it always shows the links.
-    const hidden = foldable && collapsed;
-    const toggle = () => {
-        setCollapsed(!collapsed);
-        writeFlag(linksKey, !collapsed);
-    };
-
-    return (
-        <nav aria-label='Main' className={cn('flex min-w-0 flex-col gap-0.5', foldable && 'mt-auto')}>
-            {foldable && (
-                <button
-                    type='button'
-                    aria-expanded={!hidden}
-                    aria-controls='nightfall-main-links'
-                    onClick={toggle}
-                    className={cn(
-                        headingClass,
-                        'flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent py-1 text-left hover:text-foreground',
-                        railHidden
-                    )}
-                >
-                    <span className='flex-1'>Panel</span>
-                    <ChevronDown aria-hidden className={cn('size-3.5 transition-transform', hidden && '-rotate-90')} />
-                </button>
-            )}
-            <div
-                id='nightfall-main-links'
-                className={cn('min-w-0 flex-col gap-0.5', hidden ? 'hidden lg:group-data-rail/sidebar:flex' : 'flex')}
-            >
-                <div className='min-w-0 overflow-hidden'>
-                    <Slot name='nav.items.before' compact={rail} />
-                </div>
-                {model.links.map((link) => (
-                    <PanelLink
-                        key={link.id}
-                        destination={link.destination}
-                        exact={link.exact}
-                        title={rail ? link.label : undefined}
-                        className={itemClass}
-                    >
-                        <NavIcon name={link.icon} />
-                        <span className={cn('min-w-0 flex-1 truncate', railSrOnly)}>{link.label}</span>
-                    </PanelLink>
-                ))}
-                <div className='min-w-0 overflow-hidden'>
-                    <Slot name='nav.items.after' compact={rail} />
-                </div>
-            </div>
-        </nav>
-    );
-}
 
 /** A sidebar beside the page on large screens, and a drawer behind a menu button below them. */
 export default function Shell({ model, className, children }: ViewProps<'layout.app'>) {
     const { brand, user } = model;
     const account = model.links.find((link) => link.id === 'account');
     const [open, setOpen] = useState(false);
+    const menuButton = useRef<HTMLButtonElement>(null);
+    const closeButton = useRef<HTMLButtonElement>(null);
     const [rail, setRail] = useState(() => readFlag(railKey));
     const { pathname } = usePanelLocation();
     const toggleRail = () => {
@@ -328,13 +27,21 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
 
     // Close the drawer when one of its links navigates, or on Escape.
     useEffect(() => setOpen(false), [pathname]);
+    // While open, the drawer holds the focus and the page behind it stays still; closing gives the focus back.
     useEffect(() => {
         if (!open) return;
 
         const close = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
+        const overflow = document.body.style.overflow;
         window.addEventListener('keydown', close);
+        document.body.style.overflow = 'hidden';
+        closeButton.current?.focus();
 
-        return () => window.removeEventListener('keydown', close);
+        return () => {
+            window.removeEventListener('keydown', close);
+            document.body.style.overflow = overflow;
+            menuButton.current?.focus();
+        };
     }, [open]);
 
     return (
@@ -345,6 +52,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                     <Brand brand={brand} className='[&_img]:h-8 [&_svg]:text-primary' />
                 </PanelLink>
                 <button
+                    ref={menuButton}
                     type='button'
                     aria-expanded={open}
                     aria-controls='nightfall-sidebar'
@@ -370,7 +78,8 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                 className={cn(
                     'group/sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
                     'transition-[translate,visibility,width] duration-200 motion-reduce:transition-none',
-                    'lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:max-w-none lg:shrink-0 lg:visible lg:translate-x-0',
+                    // Above the page column, which would otherwise take the clicks on the outer half of the fold button.
+                    'lg:sticky lg:top-0 lg:z-20 lg:h-dvh lg:max-w-none lg:shrink-0 lg:visible lg:translate-x-0',
                     rail ? 'lg:w-18' : 'lg:w-sidebar',
                     open ? 'visible translate-x-0' : 'invisible -translate-x-full'
                 )}
@@ -406,7 +115,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                             logoClassName='lg:group-data-rail/sidebar:h-8 lg:group-data-rail/sidebar:max-w-10'
                         />
                     </PanelLink>
-                    <button type='button' onClick={() => setOpen(false)} className={cn(iconButtonClass, 'lg:hidden')}>
+                    <button ref={closeButton} type='button' onClick={() => setOpen(false)} className={cn(iconButtonClass, 'lg:hidden')}>
                         <X aria-hidden className='size-5' />
                         <span className='sr-only'>Close the menu</span>
                     </button>
@@ -419,7 +128,7 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                 >
                     <View name='app.search' />
                     {/* In an area its own pages come first, so a server's console and state are in view at once. */}
-                    <AreaNav area={model.area} rail={rail} />
+                    <AreaNav key={model.area.kind} area={model.area} rail={rail} />
                     <MainLinks model={model} foldable={model.area.kind !== 'dashboard'} rail={rail} />
                 </div>
                 <div className='flex items-center gap-2 border-t border-sidebar-border p-3 lg:group-data-rail/sidebar:flex-col lg:group-data-rail/sidebar:px-2'>

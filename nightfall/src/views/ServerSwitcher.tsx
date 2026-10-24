@@ -29,7 +29,7 @@ const SEARCH_FROM = 9;
 /** The first servers listed (or found) that get their state, one request each. */
 const STATE_LIMIT = 30;
 
-const serversKey =['nightfall', 'servers'] as const;
+const serversKey = ['nightfall', 'servers'] as const;
 
 interface ServerPage {
     data: SdkServer[];

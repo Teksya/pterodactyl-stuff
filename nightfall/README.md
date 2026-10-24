@@ -13,7 +13,7 @@ components, and a split-screen sign-in.
   sign-out at the bottom. The round button on its edge folds it into a rail of icons (their names
   as tooltips), the Pterodactyl mark or logo, the server's initial with its state, and the avatar;
   the browser keeps the choice. On phones and narrow windows it becomes a drawer behind a menu
-  button; Escape or a link closes it.
+  button: it takes the focus, the page behind it stops scrolling, and Escape or a link closes it.
 - **A server switcher** on the server's card: the whole card (or the server's initial in the rail) opens
   a menu of your servers with their state, the current one checked (it cannot be picked), with a
   search field past eight servers. A server opens on the page you are on (its files from the files,
@@ -21,7 +21,8 @@ components, and a split-screen sign-in.
   list is fetched when the menu first opens, and the state of the first 30 servers listed (or
   found) once each, in the same cache as the dashboard's, never polled.
 - **Dark and light schemes**. Dark is near black instead of classic's slate; each user picks
-  dark, light or system in the sidebar. The console and the file editor stay dark in both.
+  dark, light or system in the sidebar. The console and the file editor stay dark in both, and
+  what sits on the console (the command input, Console Plus's toolbar) takes the dark colours.
 - **Softer components** for the whole UI kit, so every page and every extension built with it
   follows: rounded buttons with sentence-case labels, rounded inputs with a soft focus ring, file fields with a primary button, cards,
   dialogs, menus, tooltips, badges, checkboxes, tables, stats and charts with larger corners and
@@ -87,7 +88,9 @@ Only one theme is active at a time. To build Nightfall on another theme, change 
 The entry holds only the skins, the sign-in layout and the area layouts, which import nothing but
 `@pterodactyl/sdk/theme`, so the first screen draws at once; the shell, the search and the sign-in
 forms load in chunks with their route. `src/theme.css` is the panel's stylesheet built with
-Nightfall's classes and its two palettes, in plain Tailwind.
+Nightfall's classes and its two palettes, in plain Tailwind. Tailwind reads only `src/`, not the
+installed packages or the build output, so the stylesheet holds no class nothing uses (about
+130 kB, 20 kB gzipped).
 
 If a layer fails to render, the panel falls back to classic's. To see classic for one session,
 open any page with `?safe_mode=1`.
@@ -99,7 +102,7 @@ The texts are in English, like the rest of the panel.
 Upload `pterodactyl-nightfall-<version>.zip` in Admin → Extensions, or on the panel host:
 
 ```bash
-php artisan p:extension:install pterodactyl-nightfall-1.1.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-nightfall-1.3.0.zip --enable --replace
 php artisan p:theme:activate nightfall
 ```
 
@@ -118,7 +121,9 @@ Settings (colours, logo, texts) do not carry over: set them again on **Admin > T
 | `src/theme.tsx` | `defineTheme`: skins and views |
 | `src/theme.css` | The panel stylesheet with Nightfall's palettes, animations and dot grid |
 | `src/skins.ts` | The UI kit recipes |
-| `src/views/Shell.tsx` | The sidebar shell |
+| `src/views/Shell.tsx` | The sidebar shell and the drawer |
+| `src/views/sidebar/` | The area navigation, the main links, the scheme menu, their classes and stored choices |
+| `src/views/ServerSwitcher.tsx` | The server switcher |
 | `src/views/NavIcon.tsx` | Navigation icons by lucide name |
 | `src/views/Search.tsx` | The search field and dialog |
 | `src/views/FileList.tsx`, `ActivityLog.tsx` | The file list's and the activity log's cards |

@@ -1,6 +1,16 @@
 /* The panel stylesheet with every class the panel uses, then Nightfall's own. Plain Tailwind: no prefix. */
 @import '@pterodactyl/sdk/theme-entry.css';
 
+/*
+ * Only Nightfall's own files add classes. Left to itself, Tailwind also reads the installed packages
+ * (the SDK's bundled panel code among them), the build output and the lock file, and doubles the
+ * stylesheet with classes nothing here uses.
+ */
+@source not '../node_modules';
+@source not '../dist';
+@source not '../*.json';
+@source not '../*.md';
+
 @theme {
     /* Classic's small corners (rounded-xs) on rows, chips and notices, softened with the rest. */
     --radius-xs: calc(var(--radius) * 0.45);
@@ -41,8 +51,12 @@
     --editor-selection: color-mix(in oklab, var(--primary) 35%, oklch(0.16 0.004 260));
 }
 
-/* Dark: near black with a hint of blue, in place of classic's slate. */
-.dark {
+/*
+ * Dark: near black with a hint of blue, in place of classic's slate. The console stays dark in the
+ * light scheme too, so it and what sits on it (the command input, Console Plus's toolbar) take these.
+ */
+.dark,
+.light [class*='bg-terminal'] {
     --background: oklch(0.145 0.004 260);
     --foreground: oklch(0.93 0.005 260);
     --card: oklch(0.19 0.005 260);
@@ -65,6 +79,11 @@
     --sidebar-foreground: var(--foreground);
     --sidebar-border: var(--border);
     --terminal-background: oklch(0.16 0.004 260);
+}
+
+.light [class*='bg-terminal'] {
+    color: var(--foreground);
+    color-scheme: dark;
 }
 
 /* Light: classic's light scaffold is provisional, so Nightfall sets its own. */

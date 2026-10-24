@@ -166,9 +166,14 @@ test('opens the sidebar as a drawer from the menu button, and closes it on Escap
     const menu = screen.getByRole('button', { name: 'Menu' });
     fireEvent.click(menu);
     expect(menu.getAttribute('aria-expanded')).toBe('true');
+    // The drawer takes the focus and the page behind it stops scrolling.
+    expect(document.activeElement?.textContent).toBe('Close the menu');
+    expect(document.body.style.overflow).toBe('hidden');
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(menu.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(menu);
+    expect(document.body.style.overflow).toBe('');
 });
 
 test('offers the scheme menu only when the theme has both schemes', () => {
