@@ -14,6 +14,12 @@ components, and a split-screen sign-in.
   as tooltips), the Pterodactyl mark or logo, the server's initial with its state, and the avatar;
   the browser keeps the choice. On phones and narrow windows it becomes a drawer behind a menu
   button; Escape or a link closes it.
+- **A server switcher** on the server's card: the whole card (or the server's initial in the rail) opens
+  a menu of your servers with their state, the current one checked (it cannot be picked), with a
+  search field past eight servers. A server opens on the page you are on (its files from the files,
+  its backups from the backups) when you may see that page there, and on its console otherwise. The
+  list is fetched when the menu first opens, and the state of the first 30 servers listed (or
+  found) once each, in the same cache as the dashboard's, never polled.
 - **Dark and light schemes**. Dark is near black instead of classic's slate; each user picks
   dark, light or system in the sidebar. The console and the file editor stay dark in both.
 - **Softer components** for the whole UI kit, so every page and every extension built with it
@@ -93,7 +99,7 @@ The texts are in English, like the rest of the panel.
 Upload `pterodactyl-nightfall-<version>.zip` in Admin → Extensions, or on the panel host:
 
 ```bash
-php artisan p:extension:install pterodactyl-nightfall-1.0.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-nightfall-1.1.0.zip --enable --replace
 php artisan p:theme:activate nightfall
 ```
 

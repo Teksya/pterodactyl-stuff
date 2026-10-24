@@ -14,11 +14,11 @@ import {
     type AppLayoutModel,
     type NavItem,
     type ServerArea,
-    type ServerRunState,
     type ViewProps,
 } from '@pterodactyl/sdk/theme';
 import Brand from './Brand';
 import NavIcon from './NavIcon';
+import ServerSwitcher, { states } from './ServerSwitcher';
 
 type Area = AccountArea | ServerArea | AdminArea;
 
@@ -55,13 +55,6 @@ const scrollerClass = [
 
 const headingClass ='px-3 pb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/70';
 
-const states: Record<ServerRunState, { label: string; dot: string }> = {
-    running: { label: 'Running', dot: 'bg-success' },
-    starting: { label: 'Starting', dot: 'bg-warning' },
-    stopping: { label: 'Stopping', dot: 'bg-warning' },
-    offline: { label: 'Offline', dot: 'bg-destructive' },
-};
-
 /** The slots of an area's navigation, which its own layout renders in classic. */
 function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; compact: boolean }) {
     if (area.kind === 'server') return <Slot name={`server.navigation.${at}`} data={area.server} compact={compact} />;
@@ -83,24 +76,49 @@ function AreaNav({ area, rail }: { area: AppArea; rail: boolean }) {
         <nav aria-label={label} className='flex min-w-0 flex-col gap-0.5'>
             {area.kind === 'server' ? (
                 <>
-                    <div className={cn('mb-2 rounded-xl bg-card px-3 py-2.5 ring-1 ring-border', railHidden)}>
-                        <p className='truncate text-sm font-semibold text-foreground'>{area.name}</p>
-                        <p className='mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground'>
-                            <span aria-hidden className={cn('size-2 rounded-full', state?.dot ?? 'bg-muted-foreground/50')} />
-                            {state?.label ?? 'Unknown'}
-                        </p>
-                    </div>
-                    {/* In the rail: the server's initial, with its state as a dot. */}
-                    <div
-                        title={`${area.name}: ${state?.label ?? 'Unknown'}`}
-                        className='relative mx-auto mb-2 hidden size-10 items-center justify-center rounded-xl bg-card text-sm font-semibold text-foreground ring-1 ring-border lg:group-data-rail/sidebar:flex'
-                    >
-                        <span aria-hidden>{area.name.trim().charAt(0).toUpperCase() || '?'}</span>
-                        <span
-                            aria-hidden
-                            className={cn('absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-sidebar', state?.dot ?? 'bg-muted-foreground')}
-                        />
-                    </div>
+                    {/* The whole card opens the server menu. */}
+                    <ServerSwitcher
+                        area={area}
+                        triggerClassName={cn(
+                            'group/server mb-2 flex w-full cursor-pointer items-center gap-2 rounded-xl border-0 bg-card py-2.5 pr-3 pl-3 text-left ring-1 ring-border',
+                            'transition-colors hover:bg-popover focus-visible:outline-2 focus-visible:outline-ring data-popup-open:bg-popover',
+                            railHidden
+                        )}
+                        triggerContent={
+                            <>
+                                <span className='min-w-0 flex-1'>
+                                    <span className='block truncate text-sm font-semibold text-foreground'>{area.name}</span>
+                                    <span className='mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground'>
+                                        <span aria-hidden className={cn('size-2 rounded-full', state?.dot ?? 'bg-muted-foreground/50')} />
+                                        {state?.label ?? 'Unknown'}
+                                    </span>
+                                </span>
+                                <ChevronDown
+                                    aria-hidden
+                                    className='size-4 shrink-0 text-muted-foreground transition-transform group-hover/server:text-foreground group-data-popup-open/server:rotate-180'
+                                />
+                                <span className='sr-only'>Switch server</span>
+                            </>
+                        }
+                    />
+                    {/* In the rail: the server's initial, with its state as a dot, opens the same menu. */}
+                    <ServerSwitcher
+                        area={area}
+                        triggerClassName={cn(
+                            'relative mx-auto mb-2 hidden size-10 cursor-pointer rounded-xl border-0 bg-card p-0 text-sm font-semibold text-foreground ring-1 ring-border',
+                            'transition-colors hover:bg-popover focus-visible:outline-2 focus-visible:outline-ring lg:group-data-rail/sidebar:flex'
+                        )}
+                        triggerContent={
+                            <span title={`${area.name}: ${state?.label ?? 'Unknown'}`} className='flex size-full items-center justify-center'>
+                                <span aria-hidden>{area.name.trim().charAt(0).toUpperCase() || '?'}</span>
+                                <span className='sr-only'>Switch server</span>
+                                <span
+                                    aria-hidden
+                                    className={cn('absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-sidebar', state?.dot ?? 'bg-muted-foreground')}
+                                />
+                            </span>
+                        }
+                    />
                 </>
             ) : (
                 <p className={cn(headingClass, railHidden)}>{label}</p>

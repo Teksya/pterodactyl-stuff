@@ -1,8 +1,19 @@
-import { afterEach, beforeAll, expect, test } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
-import { Button, Card, FileInput, ProgressBar, Spinner } from '@pterodactyl/sdk';
-import { preloadTheme, renderView, renderWithTheme, type RenderedView } from '@pterodactyl/sdk/testing';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import {
+    Button,
+    Card,
+    FileInput,
+    ProgressBar,
+    Spinner,
+    serverResourcesQueryOptions,
+    type SdkServer,
+    type SdkServerResources,
+} from '@pterodactyl/sdk';
+import { client, http, queryClient } from '@pterodactyl/sdk/api';
+import { createTestServer, preloadTheme, renderView, renderWithTheme, type RenderedView } from '@pterodactyl/sdk/testing';
 import theme from './theme';
+import { destinationFor } from './views/ServerSwitcher';
 
 const themes = [theme];
 let rendered: RenderedView | undefined;
@@ -14,7 +25,22 @@ afterEach(() => {
     rendered?.unmount();
     rendered = undefined;
     cleanup();
+    vi.restoreAllMocks();
+    queryClient.clear();
 });
+
+/** Answers the client API's server list with `servers`, on one page, and every server as offline. */
+function serveServers(servers: SdkServer[]) {
+    const offline = { object: 'stats', attributes: { current_state: 'offline' } } as SdkServerResources;
+    // States come through the generated API client, as the dashboard asks for them.
+    vi.spyOn(client, 'get').mockImplementation((async () => ({ data: offline })) as unknown as typeof client.get);
+
+    return vi.spyOn(http, 'get').mockImplementation(async (url: string) => {
+        if (url === '/api/client') return { data: { object: 'list', data: servers, meta: { pagination: { total_pages: 1 } } } };
+
+        throw new Error(`Unexpected ${url}`);
+    });
+}
 
 const probe = () => <span>probe</span>;
 
@@ -165,6 +191,78 @@ test('draws the server navigation, with its state and its slots, in the sidebar'
     expect(nav).toContain('Running');
     expect(nav).toContain('Backups');
     expect(nav).toContain('Mods for Survival');
+});
+
+test("switches to another server from the server card's menu, the current one checked", async () => {
+    const current = createTestServer({ identifier: 'srv-current', name: 'Survival', permissions: ['*'] });
+    const other = createTestServer({ identifier: 'lobby1', uuid: '22222222-2222-4222-8222-222222222222', name: 'Lobby', permissions: ['*'] });
+    // The fixture's server is the one in view, whatever its identifier.
+    rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+    const identifier = screen.getByRole('navigation', { name: 'Server' }).querySelector('a')?.getAttribute('href')?.split('/')[2];
+    const get = serveServers([{ ...current, attributes: { ...current.attributes, identifier: identifier ?? 'srv-current' } }, other]);
+
+    // Nothing is fetched until a menu opens; the card and the rail each have a trigger.
+    expect(get).not.toHaveBeenCalled();
+    const triggers = screen.getAllByRole('button', { name: /Switch server/ });
+    expect(triggers).toHaveLength(2);
+    // The whole card, with the server's name and state, is the trigger.
+    expect(triggers[0].textContent).toContain('Survival');
+    expect(triggers[0].textContent).toContain('Running');
+
+    fireEvent.click(triggers[0]);
+    const menu = await screen.findByRole('menu');
+    expect(get).toHaveBeenCalledWith('/api/client', { params: { page: 1, per_page: 100 } });
+
+    // The current server keeps its live state and cannot be picked.
+    const survival = await within(menu).findByRole('menuitemcheckbox', { name: /Survival/ });
+    expect(survival.getAttribute('aria-checked')).toBe('true');
+    expect(survival.getAttribute('aria-disabled')).toBe('true');
+    expect(survival.textContent).toContain('(Running)');
+    // The others' states are asked once each, in the dashboard's cache entry.
+    const lobby = await within(menu).findByRole('menuitem', { name: 'Lobby (Offline)' });
+    expect(lobby.getAttribute('href')).toBe('/server/lobby1');
+    expect(lobby.querySelector('.bg-destructive')).not.toBeNull();
+    expect(queryClient.getQueryData(serverResourcesQueryOptions(other.attributes.uuid).queryKey)?.attributes.current_state).toBe('offline');
+    // A short list needs no search field.
+    expect(within(menu).queryByRole('searchbox')).toBeNull();
+});
+
+test('searches the switcher once there are more than eight servers', async () => {
+    const servers = Array.from({ length: 12 }, (_, index) =>
+        createTestServer({ identifier: `srv${index}`, uuid: `0000000${index}-0000-4000-8000-000000000000`, name: index % 2 ? `Lobby ${index}` : `Survival ${index}` })
+    );
+    serveServers(servers);
+    rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Switch server/ })[1]);
+    const menu = await screen.findByRole('menu');
+    const field = await within(menu).findByRole('searchbox', { name: 'Search your servers' });
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(12);
+
+    // Letters typed in the field stay there instead of jumping to a matching item.
+    field.focus();
+    fireEvent.keyDown(field, { key: 'L' });
+    expect(document.activeElement).toBe(field);
+
+    fireEvent.change(field, { target: { value: 'lobby' } });
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent?.replace(/\(.*\)$/, ''))).toEqual(['Lobby 1', 'Lobby 3', 'Lobby 5', 'Lobby 7', 'Lobby 9', 'Lobby 11']);
+    fireEvent.change(field, { target: { value: 'nether' } });
+    expect(within(menu).queryAllByRole('menuitem')).toHaveLength(0);
+    expect(menu.textContent).toContain('No servers match.');
+});
+
+test('opens the same page of the other server when its user may see it, the console otherwise', () => {
+    const server = (permissions: string[]) => createTestServer({ identifier: 'lobby1', permissions });
+
+    expect(destinationFor(server(['*']), '/server/abc/files/edit')).toEqual({ to: '/server/$id/files', params: { id: 'lobby1' }, hash: '/' });
+    expect(destinationFor(server(['backup.read']), '/server/abc/backups')).toEqual({ to: '/server/$id/backups', params: { id: 'lobby1' } });
+    expect(destinationFor(server(['*']), '/server/abc/schedules/4')).toEqual({ to: '/server/$id/schedules', params: { id: 'lobby1' } });
+    expect(destinationFor(server(['file.sftp']), '/server/abc/settings')).toEqual({ to: '/server/$id/settings', params: { id: 'lobby1' } });
+    // Without the permission, outside a server page, or on an extension's page: the console.
+    expect(destinationFor(server(['control.start']), '/server/abc/backups')).toEqual({ to: '/server/$id', params: { id: 'lobby1' } });
+    expect(destinationFor(server(['*']), '/server/abc')).toEqual({ to: '/server/$id', params: { id: 'lobby1' } });
+    expect(destinationFor(server(['*']), '/server/abc/constructor')).toEqual({ to: '/server/$id', params: { id: 'lobby1' } });
+    expect(destinationFor(server(['*']), '/account')).toEqual({ to: '/server/$id', params: { id: 'lobby1' } });
 });
 
 test('draws the account and admin navigation with their slots', () => {
