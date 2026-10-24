@@ -8,6 +8,7 @@ import {
     Slot,
     View,
     cn,
+    useActiveNavItem,
     type AccountArea,
     type AdminArea,
     type AppArea,
@@ -63,14 +64,54 @@ function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; c
     return <Slot name={`panel.navigation.${at}`} compact={compact} />;
 }
 
-/** The pages of the area the user is in, with a heading where a group of items starts. */
+const noItems: readonly NavItem[] = [];
+
+/** The groups of an area folded in this browser, by name. */
+function useFoldedGroups(area: AppArea['kind']) {
+    const key = `nightfall:folded-groups:${area}`;
+    const read = (): string[] => {
+        try {
+            const value = JSON.parse(localStorage.getItem(key) ?? '[]');
+
+            return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+        } catch {
+            return [];
+        }
+    };
+    const [folded, setFolded] = useState(read);
+    useEffect(() => setFolded(read()), [key]);
+
+    const toggle = (group: string) =>
+        setFolded((current) => {
+            const next = current.includes(group) ? current.filter((item) => item !== group) : [...current, group];
+            try {
+                localStorage.setItem(key, JSON.stringify(next));
+            } catch {
+                // Kept in memory only.
+            }
+
+            return next;
+        });
+
+    return { folded, toggle };
+}
+
+/**
+ * The pages of the area the user is in. Where a group of items starts, a heading that folds the
+ * group; the group of the page in view stays open, and the rail shows every item.
+ */
 function AreaNav({ area, rail }: { area: AppArea; rail: boolean }) {
+    const items: readonly NavItem[] =
+        area.kind === 'dashboard' ? noItems : area.kind === 'server' && area.adminLink ? [...area.nav.items, area.adminLink] : area.nav.items;
+    const current = useActiveNavItem(items);
+    const { folded, toggle } = useFoldedGroups(area.kind);
+
     if (area.kind === 'dashboard') return null;
 
-    const items: readonly NavItem[] = area.kind === 'server' && area.adminLink ? [...area.nav.items, area.adminLink] : area.nav.items;
     const label = { server: 'Server', account: 'Account', admin: 'Administration' }[area.kind];
     const groupStarts = new Set(items.filter((item, index) => item.group && item.group !== items[index - 1]?.group));
     const state = area.kind === 'server' && area.state ? states[area.state] : null;
+    const isFolded = (group: string | null) => !rail && group !== null && group !== current?.group && folded.includes(group);
 
     return (
         <nav aria-label={label} className='flex min-w-0 flex-col gap-0.5'>
@@ -129,17 +170,31 @@ function AreaNav({ area, rail }: { area: AppArea; rail: boolean }) {
             <Navigation items={items}>
                 {(item, { badge }) => (
                     <>
-                        {groupStarts.has(item) && (
+                        {groupStarts.has(item) && item.group && (
                             <>
-                                <p className={cn(headingClass, 'mt-3', railHidden)}>{item.group}</p>
+                                <button
+                                    type='button'
+                                    aria-expanded={!isFolded(item.group)}
+                                    onClick={() => toggle(item.group!)}
+                                    className={cn(
+                                        headingClass,
+                                        'mt-3 flex w-full cursor-pointer items-center gap-1 border-0 bg-transparent pt-0 text-left hover:text-foreground',
+                                        railHidden
+                                    )}
+                                >
+                                    <span className='min-w-0 flex-1 truncate'>{item.group}</span>
+                                    <ChevronDown aria-hidden className={cn('size-3.5 shrink-0 transition-transform', isFolded(item.group) && '-rotate-90')} />
+                                </button>
                                 <hr aria-hidden className='mx-2 my-2 hidden border-sidebar-border lg:group-data-rail/sidebar:block' />
                             </>
                         )}
-                        <NavigationLink item={item} title={rail ? item.label : undefined} className={itemClass}>
-                            <NavIcon name={item.icon} />
-                            <span className={cn('min-w-0 flex-1 truncate', railSrOnly)}>{item.label}</span>
-                            <span className={railHidden}>{badge}</span>
-                        </NavigationLink>
+                        {!isFolded(item.group) && (
+                            <NavigationLink item={item} title={rail ? item.label : undefined} className={itemClass}>
+                                <NavIcon name={item.icon} />
+                                <span className={cn('min-w-0 flex-1 truncate', railSrOnly)}>{item.label}</span>
+                                <span className={railHidden}>{badge}</span>
+                            </NavigationLink>
+                        )}
                     </>
                 )}
             </Navigation>

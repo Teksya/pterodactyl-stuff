@@ -12,6 +12,7 @@ import {
 } from '@pterodactyl/sdk';
 import { client, http, queryClient } from '@pterodactyl/sdk/api';
 import { createTestServer, preloadTheme, renderView, renderWithTheme, type RenderedView } from '@pterodactyl/sdk/testing';
+import type { ThemeDefinition, ViewProps } from '@pterodactyl/sdk/theme';
 import theme from './theme';
 import { destinationFor } from './views/ServerSwitcher';
 
@@ -277,6 +278,36 @@ test('draws the account and admin navigation with their slots', () => {
 
     expect(admin).toContain('Themes');
     expect(admin).toContain('probe');
+});
+
+test('folds a group of the area navigation from its heading, and remembers it', () => {
+    localStorage.clear();
+    // A layer that puts the admin pages after the first two in a group, as an extension may.
+    const grouping = {
+        views: {
+            'layout.app': ({ model, Default, children }: ViewProps<'layout.app'>) => (
+                <Default
+                    model={
+                        model.area.kind === 'admin'
+                            ? { ...model, area: { ...model.area, nav: { items: model.area.nav.items.map((item, index) => ({ ...item, group: index < 2 ? null : 'Folder A' })) } } }
+                            : model
+                    }
+                >
+                    {children}
+                </Default>
+            ),
+        },
+    } as unknown as ThemeDefinition;
+    rendered = renderView('layout.app', { themes: [theme, grouping], fixture: 'adminArea' });
+    const nav = screen.getByRole('navigation', { name: 'Administration' });
+    const third = within(nav).getAllByRole('link')[2].textContent ?? '';
+
+    fireEvent.click(within(nav).getByRole('button', { name: 'Folder A' }));
+    expect(within(nav).getByRole('button', { name: 'Folder A' }).getAttribute('aria-expanded')).toBe('false');
+    expect(nav.textContent).not.toContain(third);
+
+    rendered = renderView('layout.app', { themes: [theme, grouping], fixture: 'adminArea' });
+    expect(screen.getByRole('navigation', { name: 'Administration' }).textContent).not.toContain(third);
 });
 
 test('leaves only the page to the area layouts', () => {

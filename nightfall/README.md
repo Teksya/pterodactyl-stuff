@@ -8,7 +8,7 @@ components, and a split-screen sign-in.
 
 - **A sidebar** on wide screens with the brand, the server search, the navigation of the area you
   are in first (a server with its name and state, the account, or the administration, with its
-  groups), then the main links (dashboard, admin, account) at its foot, which fold away behind their
+  groups, each folding from its heading; the group of the page in view stays open), then the main links (dashboard, admin, account) at its foot, which fold away behind their
   "Panel" heading (the choice is kept in the browser), and your account, the scheme menu and
   sign-out at the bottom. The round button on its edge folds it into a rail of icons (their names
   as tooltips), the Pterodactyl mark or logo, the server's initial with its state, and the avatar;
