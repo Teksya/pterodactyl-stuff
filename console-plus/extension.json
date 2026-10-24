@@ -1,0 +1,24 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "console-plus",
+    "name": "Console Plus",
+    "version": "1.0.0",
+    "description": "A console you can read and a fuller console page: search, level filters, colours, folded stack traces, clickable links, favourite commands, saved history, log download, and live cards and graphs over up to an hour.",
+    "author": "Olivier DUTOIT",
+    "icon": "square-terminal",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\ConsolePlus\\ConsolePlusProvider",
+    "autoload": {
+        "OlivierDutoit\\ConsolePlus\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "cx",
+        "views": ["server.terminal", "server.stats", "server.graphs"]
+    }
+}

@@ -10,6 +10,7 @@ each with its own manifest, version and README.
 | [`nightfall`](nightfall) | `nightfall` | Theme: near-black and light schemes, a sidebar for every navigation, a split-screen sign-in. |
 | [`security-keys`](security-keys) | `security-keys` | Sign in with a YubiKey or any FIDO2 / WebAuthn key, at the two-factor checkpoint or without a password. |
 | [`webhooks`](webhooks) | `webhooks` | Panel, server and account events to Discord, Slack, Teams, Telegram, ntfy, Gotify, Pushover, Matrix or any HTTP endpoint. |
+| [`console-plus`](console-plus) | `console-plus` | A console you can read (search, level filters, colours, folded stack traces, clickable links, favourite commands, saved history, log download) and live cards and graphs over up to an hour. |
 | [`server-organizer`](server-organizer) | `server-organizer` | Organise the dashboard's servers: folders with drag and drop, grouping by node, location or egg, owned or shared filters, your own order. |
 
 ## Install
