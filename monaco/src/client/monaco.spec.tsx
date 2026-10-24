@@ -92,7 +92,8 @@ test('opens the buffer the panel holds, in the language it picked', () => {
     renderEditor({ read: () => 'motd=Edited\n', language: 'text/x-properties', readOnly: true });
 
     expect(fake.monaco.editor.createModel).toHaveBeenCalledWith('motd=Edited\n', 'ini');
-    expect(fake.state.options).toMatchObject({ readOnly: true, automaticLayout: true });
+    // Menus outside a shadow DOM, where Monaco's colours reach them.
+    expect(fake.state.options).toMatchObject({ readOnly: true, automaticLayout: true, fixedOverflowWidgets: true, useShadowDOM: false });
     // The panel's language picker and Save button stay around the replaced canvas.
     expect(screen.getByRole('combobox')).toBeTruthy();
 });

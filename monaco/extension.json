@@ -2,7 +2,7 @@
     "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
     "id": "monaco",
     "name": "Monaco Editor",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Replaces the file editor's code editor with Monaco, the editor of Visual Studio Code.",
     "author": "Olivier DUTOIT",
     "icon": "code-xml",

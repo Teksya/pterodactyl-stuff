@@ -79,6 +79,9 @@ export default function MonacoCanvas({ model, className }: ViewProps<'server.fil
             lineHeight: cssPixels(element, 'var(--text-sm--line-height)', 20),
             padding: { top: 12 },
             fixedOverflowWidgets: true,
+            // With fixed overflow widgets, a shadow DOM puts the context menu under <body>, outside the
+            // editor that carries Monaco's colours, and it draws with no background.
+            useShadowDOM: false,
         });
 
         const edits = instance.onDidChangeModelContent(() => actions.current.change(instance.getValue()));
