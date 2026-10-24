@@ -1,0 +1,32 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "admin-sidebar",
+    "name": "Admin Sidebar",
+    "version": "1.0.0",
+    "description": "Organise the admin area's navigation in folders that fold, with the pages extensions add gathered under Extensions. Arranged by drag and drop from Admin → Sidebar.",
+    "author": "Olivier DUTOIT",
+    "icon": "panel-left",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\AdminSidebar\\AdminSidebarProvider",
+    "autoload": {
+        "OlivierDutoit\\AdminSidebar\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "as",
+        "views": ["layout.app", "layout.admin"],
+        "screens": [
+            {
+                "id": "sidebar",
+                "area": "admin",
+                "path": "sidebar",
+                "nav": { "label": "Sidebar", "icon": "panel-left" }
+            }
+        ]
+    }
+}
