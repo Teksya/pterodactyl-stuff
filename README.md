@@ -13,6 +13,7 @@ each with its own manifest, version and README.
 | [`admin-sidebar`](admin-sidebar) | `admin-sidebar` | Organise the admin navigation in folders that fold, with the pages extensions add under Extensions. |
 | [`console-plus`](console-plus) | `console-plus` | A console you can read (search, level filters, colours, folded stack traces, clickable links, favourite commands, saved history, log download) and live cards and graphs over up to an hour. |
 | [`server-organizer`](server-organizer) | `server-organizer` | Organise the dashboard's servers: folders with drag and drop, grouping by node, location or egg, owned or shared filters, your own order. |
+| [`minecraft`](minecraft) | `minecraft` | A Minecraft toolkit, from 1.8 to 26.x: players as in Pelican's Player Manager (live over RCON, inventory and ender chest, statistics, actions online and offline), worlds with snapshots and one-click restore, the game rules, `server.properties` as forms. |
 
 ## Install
 

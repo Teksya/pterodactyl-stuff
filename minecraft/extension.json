@@ -1,0 +1,82 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "minecraft",
+    "name": "Minecraft",
+    "version": "1.0.0",
+    "description": "A Minecraft toolkit for Pterodactyl, with no setup on the server: every player who joined, with their inventory drawn like the game, their state and statistics, and actions online (console) and offline (their files); the world and its game rules; server.properties as forms.",
+    "author": "Olivier DUTOIT",
+    "icon": "pickaxe",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\Minecraft\\MinecraftProvider",
+    "autoload": {
+        "OlivierDutoit\\Minecraft\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "mc",
+        "screens": [
+            {
+                "id": "players",
+                "area": "server",
+                "path": "players",
+                "permission": [
+                    "ext.minecraft.read"
+                ],
+                "nav": {
+                    "label": "Players",
+                    "icon": "users"
+                },
+                "when": {
+                    "eggTags": {
+                        "any": [
+                            "minecraft"
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "world",
+                "area": "server",
+                "path": "world",
+                "permission": [
+                    "ext.minecraft.read"
+                ],
+                "nav": {
+                    "label": "Worlds",
+                    "icon": "globe"
+                },
+                "when": {
+                    "eggTags": {
+                        "any": [
+                            "minecraft"
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "properties",
+                "area": "server",
+                "path": "server-properties",
+                "permission": [
+                    "file.read"
+                ],
+                "nav": {
+                    "label": "Properties",
+                    "icon": "sliders-horizontal"
+                },
+                "when": {
+                    "eggTags": {
+                        "any": [
+                            "minecraft"
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+}
