@@ -2,7 +2,7 @@
     "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
     "id": "minecraft",
     "name": "Minecraft",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "A Minecraft toolkit for Pterodactyl, with no setup on the server: every player who joined, with their inventory drawn like the game, their state and statistics, and actions online (console) and offline (their files); the world and its game rules; server.properties as forms.",
     "author": "Olivier DUTOIT",
     "icon": "pickaxe",

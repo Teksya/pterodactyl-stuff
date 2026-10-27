@@ -19,9 +19,12 @@ export async function overview(uuid: string): Promise<Overview> {
     return (await http.get(`${base(uuid)}/overview`)).data;
 }
 
-/** Turns RCON on, on one of the server's allocation ports; it takes effect after a restart. */
-export async function enableRcon(uuid: string, port: number): Promise<RconStatus> {
-    return (await http.post(`${base(uuid)}/rcon`, { port })).data;
+/**
+ * Turns RCON on, on one of the server's allocation ports, with the current password or a new random
+ * one; it takes effect after a restart.
+ */
+export async function enableRcon(uuid: string, port: number, newPassword: boolean): Promise<RconStatus> {
+    return (await http.post(`${base(uuid)}/rcon`, { port, new_password: newPassword })).data;
 }
 
 export async function players(uuid: string): Promise<Player[]> {

@@ -18,6 +18,8 @@ export interface RconStatus {
     port: number | null;
     /** Whether the port is one of the server's allocations, so the panel can reach it. */
     allocated: boolean;
+    /** Whether server.properties already has a password, which the user may keep. */
+    password: boolean;
     /** Allocation ports the game and query do not use. */
     ports: number[];
 }

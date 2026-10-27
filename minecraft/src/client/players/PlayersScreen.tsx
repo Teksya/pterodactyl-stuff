@@ -171,9 +171,12 @@ export function RconDialog({ open, status, onClose }: { open: boolean; status: R
     const uuid = useCurrentServerUuid() ?? '';
     const client = useQueryClient();
     const [port, setPort] = useState(String(status.ports.includes(status.port ?? 0) ? status.port : (status.ports[0] ?? '')));
+    // A password already in server.properties may be the user's own: kept unless they ask for a new one.
+    const [password, setPassword] = useState<'keep' | 'new'>('keep');
+    const newPassword = !status.password || password === 'new';
     const [turnedOn, setTurnedOn] = useState(false);
     const enable = useMutation({
-        mutationFn: () => enableRcon(uuid, Number(port)),
+        mutationFn: () => enableRcon(uuid, Number(port), newPassword),
         onSuccess: () => {
             setTurnedOn(true);
             void client.invalidateQueries({ queryKey: keys.overview(uuid) });
@@ -198,11 +201,35 @@ export function RconDialog({ open, status, onClose }: { open: boolean; status: R
                     {status.ports.length === 0 ? (
                         <Alert type='info'>RCON needs a port of its own. Add an allocation in the Network tab (or ask your host for one), then come back.</Alert>
                     ) : (
-                        <div>
-                            <Label htmlFor='mc-rcon-port'>Port</Label>
-                            <Select id='mc-rcon-port' value={port} options={status.ports.map((value) => ({ value: String(value), label: String(value) }))} onChange={(value) => setPort(String(value))} />
-                            <p className='mc:mt-1 mc:text-xs mc:text-muted-foreground'>The panel writes a new random password in server.properties. Nobody else needs it.</p>
-                        </div>
+                        <>
+                            <div>
+                                <Label htmlFor='mc-rcon-port'>Port</Label>
+                                <Select id='mc-rcon-port' value={port} options={status.ports.map((value) => ({ value: String(value), label: String(value) }))} onChange={(value) => setPort(String(value))} />
+                            </div>
+                            <div>
+                                {status.password && (
+                                    <>
+                                        <Label htmlFor='mc-rcon-password'>Password</Label>
+                                        <Select
+                                            id='mc-rcon-password'
+                                            value={password}
+                                            options={[
+                                                { value: 'keep', label: 'Keep the current password' },
+                                                { value: 'new', label: 'Replace it with a new random one' },
+                                            ]}
+                                            onChange={(value) => setPassword(value === 'new' ? 'new' : 'keep')}
+                                        />
+                                    </>
+                                )}
+                                <p className='mc:mt-1 mc:text-xs mc:text-muted-foreground'>
+                                    {!newPassword
+                                        ? 'The password in server.properties stays as it is.'
+                                        : status.password
+                                          ? 'The panel writes a new random password in server.properties: tools that use the current one will need the new one.'
+                                          : 'The panel writes a new random password in server.properties. Nobody else needs it.'}
+                                </p>
+                            </div>
+                        </>
                     )}
                 </div>
             )}

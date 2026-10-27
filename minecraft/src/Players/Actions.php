@@ -7,12 +7,14 @@ namespace OlivierDutoit\Minecraft\Players;
 use InvalidArgumentException;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
 use OlivierDutoit\Minecraft\Server\ServerConsole;
+use OlivierDutoit\Minecraft\Server\ServerRcon;
 use Pterodactyl\Models\Server;
 
 /**
- * What each action does: a console command while the player is online, a change to their saved file
- * while they are away. The lists (operators, whitelist, bans) go through the console while the server
- * runs, which owns their files, and are edited as files while it is stopped.
+ * What each action does: a command while the player is online (over RCON when it answers, else typed
+ * in the console), a change to their saved file while they are away. The lists (operators, whitelist,
+ * bans) go through commands while the server runs, which owns their files, and are edited as files
+ * while it is stopped.
  */
 final class Actions
 {
@@ -29,6 +31,7 @@ final class Actions
         private readonly Lists $lists,
         private readonly MinecraftServer $files,
         private readonly ServerConsole $console,
+        private readonly ServerRcon $rcon,
     ) {}
 
     /**
@@ -53,7 +56,7 @@ final class Actions
         if (isset(self::LIST_ACTIONS[$action])) {
             [$list, $add] = self::LIST_ACTIONS[$action];
             if ($running) {
-                return $this->console($server, Commands::player($this->needName($name), $action, $input, $version));
+                return $this->command($server, Commands::player($this->needName($name), $action, $input, $version));
             }
             $this->assertStopped($status['state']);
             $this->lists->change($server, $list, ['uuid' => $player['uuid'], 'name' => $name ?? $player['uuid']], $add, is_string($input['reason'] ?? null) ? Commands::text($input['reason']) : null);
@@ -66,7 +69,7 @@ final class Actions
                 $this->assertEmpty($server, $this->needName($name), Commands::slot($input['to'] ?? null));
             }
 
-            return $this->console($server, Commands::player($this->needName($name), $action, $input, $version));
+            return $this->command($server, Commands::player($this->needName($name), $action, $input, $version));
         }
 
         if (in_array($action, self::ONLINE_ONLY, true)) {
@@ -92,7 +95,7 @@ final class Actions
         $action = ['whitelist' => 'whitelist_add', 'ops' => 'op', 'banned-players' => 'ban'][$list] ?? throw new InvalidArgumentException('Pick a list.');
         $state = $this->console->state($server);
         if ($state === 'running') {
-            return $this->console($server, Commands::player($name, $action, ['reason' => $reason]));
+            return $this->command($server, Commands::player($name, $action, ['reason' => $reason]));
         }
         $this->assertStopped($state);
 
@@ -112,7 +115,7 @@ final class Actions
         $reason = $reason !== null && $reason !== '' ? Commands::text($reason) : null;
         $state = $this->console->state($server);
         if ($state === 'running') {
-            return $this->console($server, [$add ? trim("ban-ip {$ip} {$reason}") : "pardon-ip {$ip}"]);
+            return $this->command($server, [$add ? trim("ban-ip {$ip} {$reason}") : "pardon-ip {$ip}"]);
         }
         $this->assertStopped($state);
         $this->lists->banIp($server, $ip, $add, $reason);
@@ -124,10 +127,18 @@ final class Actions
      * @param  list<string>  $commands
      * @return array{message: string, command: string}
      */
-    public function console(Server $server, array $commands): array
+    public function command(Server $server, array $commands): array
     {
         if (! $this->console->running($server)) {
             throw new InvalidArgumentException('The server is not running.');
+        }
+
+        // RCON first: it runs the commands at once, says what they did, and keeps them out of the console.
+        $answers = $this->rcon->attempt($server, $commands);
+        if ($answers !== null) {
+            $said = array_filter(array_map(fn (string $answer): string => trim((string) preg_replace('/\s*\R\s*/', ' ', $answer)), $answers), fn (string $answer): bool => $answer !== '');
+
+            return ['message' => $said === [] ? 'Done.' : implode(' · ', $said), 'command' => implode(' · ', $commands)];
         }
         $this->console->send($server, $commands);
 

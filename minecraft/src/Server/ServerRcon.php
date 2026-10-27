@@ -26,10 +26,10 @@ final class ServerRcon
     public function __construct(private readonly MinecraftServer $files) {}
 
     /**
-     * Whether RCON is on, on which port, whether that port is one of the server's allocations, and
-     * the allocation ports free for it.
+     * Whether RCON is on, on which port, whether that port is one of the server's allocations,
+     * whether server.properties already has a password, and the allocation ports free for it.
      *
-     * @return array{enabled: bool, port: int|null, allocated: bool, ports: list<int>}
+     * @return array{enabled: bool, port: int|null, allocated: bool, password: bool, ports: list<int>}
      */
     public function status(Server $server): array
     {
@@ -40,22 +40,28 @@ final class ServerRcon
             'enabled' => $this->enabled($properties),
             'port' => $port,
             'allocated' => $port !== null && $this->allocation($server, $port) !== null,
+            'password' => $this->hasPassword($properties),
             'ports' => $this->freePorts($server, $properties),
         ];
     }
 
-    /** Turns RCON on with a new random password on `$port`, one of the server's allocations. */
-    public function enable(Server $server, int $port): void
+    /**
+     * Turns RCON on on `$port`, one of the server's allocations, keeping the password already in
+     * server.properties unless `$newPassword` asks for a random one (always written when there is none).
+     */
+    public function enable(Server $server, int $port, bool $newPassword): void
     {
         $properties = $this->files->properties($server);
         if (! in_array($port, $this->freePorts($server, $properties), true)) {
             throw new InvalidArgumentException("Port {$port} is not one of this server's allocations, or the game or its query uses it.");
         }
 
+        if ($newPassword || ! $this->hasPassword($properties)) {
+            $properties->set('rcon.password', bin2hex(random_bytes(16)));
+        }
         $properties
             ->set('enable-rcon', 'true')
             ->set('rcon.port', (string) $port)
-            ->set('rcon.password', bin2hex(random_bytes(16)))
             ->set('broadcast-rcon-to-ops', 'false');
         $this->files->write($server, MinecraftServer::PROPERTIES, $properties->contents());
         Cache::forget($this->key($server, 'host'));
@@ -63,14 +69,16 @@ final class ServerRcon
     }
 
     /**
-     * Runs `$commands` on one connection and returns each answer, in order; null when RCON is off.
+     * Runs `$commands` on one connection and returns each answer, in order, waiting up to `$wait`
+     * seconds for each; null when RCON is off.
      *
      * @param  list<string>  $commands
      * @return list<string>|null
      *
-     * @throws RconException when RCON is on but no address answers, now or within the last minute.
+     * @throws RconException when RCON is on but no address answers, now or within the last minute;
+     *                       with the code SENT when it failed once the commands were sent.
      */
-    public function run(Server $server, array $commands): ?array
+    public function run(Server $server, array $commands, int $wait = self::TIMEOUT): ?array
     {
         $properties = $this->files->properties($server);
         $port = $this->port($properties);
@@ -97,7 +105,11 @@ final class ServerRcon
 
             Cache::put($this->key($server, 'host'), $host, 600);
             try {
+                $client->wait($wait);
+
                 return array_map(fn (string $command): string => $client->command($command), $commands);
+            } catch (RconException $exception) {
+                throw RconException::sent($exception);
             } finally {
                 $client->close();
             }
@@ -107,9 +119,37 @@ final class ServerRcon
         throw $last ?? RconException::unreachable($port, 'no address to try');
     }
 
+    /**
+     * Runs `$commands` over RCON and returns the answers; null when RCON is off or cannot be
+     * reached, for the console to take over. Commands RCON took and then failed on may have run,
+     * so that still throws rather than let them run twice.
+     *
+     * @param  list<string>  $commands
+     * @return list<string>|null
+     *
+     * @throws RconException with the code SENT.
+     */
+    public function attempt(Server $server, array $commands, int $wait = self::TIMEOUT): ?array
+    {
+        try {
+            return $this->run($server, $commands, $wait);
+        } catch (RconException $exception) {
+            if ($exception->getCode() === RconException::SENT) {
+                throw $exception;
+            }
+
+            return null;
+        }
+    }
+
     private function enabled(Properties $properties): bool
     {
-        return trim((string) $properties->get('enable-rcon')) === 'true' && trim((string) $properties->get('rcon.password')) !== '';
+        return trim((string) $properties->get('enable-rcon')) === 'true' && $this->hasPassword($properties);
+    }
+
+    private function hasPassword(Properties $properties): bool
+    {
+        return trim((string) $properties->get('rcon.password')) !== '';
     }
 
     /** @return list<string> the address that answered last first, then the others. */

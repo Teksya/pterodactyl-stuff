@@ -17,9 +17,9 @@ use Pterodactyl\Models\Server;
 use Throwable;
 
 /**
- * The server's players without RCON: who is online from the server list ping (or the console's `list`
- * past twelve players), everyone who joined from the world's files, and a player's state from their
- * saved file, saved first with `save-all` when they are online.
+ * The server's players: who is online from the server list ping (or `list` past twelve players, over
+ * RCON when it answers, else read back from the console), everyone who joined from the world's files,
+ * and a player's state live over RCON or from their saved file.
  */
 final class Players
 {
@@ -73,9 +73,9 @@ final class Players
             $complete = $ping !== null && count($names) >= $ping['online'];
             // The ping names twelve players at most, and none when the server hides them.
             if (! $complete) {
-                $lines = $this->console->sendAndWait($server, 'list', '/^There are \d+/i', 3.0);
-                if ($lines !== null) {
-                    $list = self::parseList(self::listAnswer($lines));
+                $answer = $this->askList($server);
+                if ($answer !== null) {
+                    $list = self::parseList($answer);
                     $names = array_column($list['players'], 'name');
                     $ping ??= ['online' => $list['online'], 'max' => $list['max'], 'version' => null];
                     $complete = count($names) >= $list['online'];
@@ -94,6 +94,26 @@ final class Players
                 'version' => $ping['version'] ?? null,
             ];
         });
+    }
+
+    /**
+     * The answer to `list`: over RCON when it answers, else from the console read back. Asking it
+     * twice is harmless, so any RCON failure hands over to the console.
+     */
+    private function askList(Server $server): ?string
+    {
+        try {
+            $answer = $this->rcon->run($server, ['list'])[0] ?? null;
+        } catch (RconException) {
+            $answer = null;
+        }
+        if ($answer !== null && preg_match('/There are \d+/i', $answer)) {
+            return $answer;
+        }
+
+        $lines = $this->console->sendAndWait($server, 'list', '/^There are \d+/i', 3.0);
+
+        return $lines === null ? null : self::listAnswer($lines);
     }
 
     /**

@@ -10,6 +10,8 @@ use RuntimeException;
 final class RconException extends RuntimeException
 {
     public const int DENIED = 1;
+    /** The commands were sent, so they may have run: they must not be sent again another way. */
+    public const int SENT = 2;
 
     /** The host stays out: it can be an address of the administrator's own network. */
     public static function unreachable(int $port, string $reason): self
@@ -35,5 +37,10 @@ final class RconException extends RuntimeException
     public static function protocol(string $what): self
     {
         return new self("RCON answered with {$what}.");
+    }
+
+    public static function sent(self $previous): self
+    {
+        return new self("RCON took the command but then failed, so it may have run: check the server before trying again. {$previous->getMessage()}", self::SENT, $previous);
     }
 }

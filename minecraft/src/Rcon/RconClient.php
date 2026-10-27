@@ -21,7 +21,7 @@ final class RconClient
     private $socket;
     private int $id = 0;
 
-    private function __construct(mixed $socket, private readonly int $timeout)
+    private function __construct(mixed $socket, private int $timeout)
     {
         $this->socket = $socket;
     }
@@ -66,6 +66,13 @@ final class RconClient
         }
 
         return self::plain($body);
+    }
+
+    /** How long each answer may take from now on: saving a world takes longer than a question. */
+    public function wait(int $seconds): void
+    {
+        $this->timeout = $seconds;
+        stream_set_timeout($this->socket, $seconds);
     }
 
     public function close(): void

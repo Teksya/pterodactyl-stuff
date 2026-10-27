@@ -310,16 +310,27 @@ const worldsData: WorldsData = {
 };
 
 test('turns RCON on on a free allocation port, or asks for one', async () => {
-    const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { enabled: true, port: 25580, allocated: true, ports: [25580, 25590] } });
-    const { unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, ports: [25580, 25590] }} onClose={() => {}} />);
+    const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { enabled: true, port: 25580, allocated: true, password: true, ports: [25580, 25590] } });
+    let { unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [25580, 25590] }} onClose={() => {}} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Turn on RCON' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/client/servers/abc/extensions/minecraft/rcon', { port: 25580 }));
+    // Without a password yet, nothing to ask: a new random one.
+    expect(await screen.findByText(/Nobody else needs it/)).toBeTruthy();
+    expect(screen.queryByText('Keep the current password')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on RCON' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/client/servers/abc/extensions/minecraft/rcon', { port: 25580, new_password: true }));
     expect(await screen.findByText(/RCON is on, on port 25580\. It starts with the server's next start\./)).toBeTruthy();
     unmount();
     host?.dispose();
 
-    withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, ports: [] }} onClose={() => {}} />);
+    // With one already in server.properties, it is kept unless the user asks for a new one.
+    ({ unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: true, ports: [25580, 25590] }} onClose={() => {}} />));
+    expect(await screen.findByText('The password in server.properties stays as it is.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on RCON' }));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith('/api/client/servers/abc/extensions/minecraft/rcon', { port: 25580, new_password: false }));
+    unmount();
+    host?.dispose();
+
+    withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [] }} onClose={() => {}} />);
     expect(await screen.findByText(/Add an allocation in the Network tab/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Turn on RCON' })).toBeNull();
 });

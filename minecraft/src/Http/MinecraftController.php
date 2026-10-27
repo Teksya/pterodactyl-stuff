@@ -62,15 +62,23 @@ final class MinecraftController
         });
     }
 
-    /** Turns RCON on, on one of the server's allocation ports; the server needs a restart for it. */
+    /**
+     * Turns RCON on, on one of the server's allocation ports, with the current password or a new
+     * one as the user chose; the server needs a restart for it.
+     */
     public function enableRcon(Request $request): JsonResponse
     {
         $server = $this->authorize($request, ['ext.minecraft.manage', 'file.update']);
-        $port = (int) $request->validate(['port' => ['required', 'integer', 'between:1,65535']])['port'];
+        $data = $request->validate([
+            'port' => ['required', 'integer', 'between:1,65535'],
+            'new_password' => ['required', 'boolean'],
+        ]);
+        $port = (int) $data['port'];
+        $newPassword = (bool) $data['new_password'];
 
-        return $this->answer(function () use ($server, $port): array {
-            $this->rcon->enable($server, $port);
-            Activity::event('server:minecraft.rcon.enable')->property('port', $port)->log();
+        return $this->answer(function () use ($server, $port, $newPassword): array {
+            $this->rcon->enable($server, $port, $newPassword);
+            Activity::event('server:minecraft.rcon.enable')->property(['port' => $port, 'new_password' => $newPassword])->log();
 
             return $this->rcon->status($server);
         });
@@ -147,7 +155,7 @@ final class MinecraftController
         $server = $this->authorize($request, ['ext.minecraft.manage']);
 
         return $this->answer(function () use ($server, $request): array {
-            $result = $this->actions->console($server, Commands::world('say', ['text' => $request->input('text')]));
+            $result = $this->actions->command($server, Commands::world('say', ['text' => $request->input('text')]));
             Activity::event('server:minecraft.world.say')->property('command', $result['command'])->log();
 
             return $result;
@@ -167,7 +175,7 @@ final class MinecraftController
         $action = (string) $request->validate(['action' => ['required', 'string', 'in:'.implode(',', Commands::WORLD_ACTIONS)]])['action'];
 
         return $this->answer(function () use ($server, $request, $action): array {
-            $result = $this->actions->console($server, Commands::world($action, $request->except('action')));
+            $result = $this->actions->command($server, Commands::world($action, $request->except('action')));
             Activity::event('server:minecraft.world.'.$action)->property('command', $result['command'])->log();
 
             return $result;

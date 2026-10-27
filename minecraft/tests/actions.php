@@ -42,7 +42,7 @@ $files = new MinecraftServer($fake, $fake, $fake);
 $console = new ServerConsole($fake, new Logs($fake), new State($fake));
 $lists = new Lists($files);
 $players = new Players($files, $console, $lists, new ServerRcon($files));
-$actions = new Actions($players, $lists, $files, $console);
+$actions = new Actions($players, $lists, $files, $console, new ServerRcon($files));
 
 // Stopped: everyone is offline, and actions change the files.
 $all = $players->all($server);
@@ -178,14 +178,21 @@ $rconServer->uuid = 'server-rcon';
 $rconServer->ports = [25590, 25565, 25580];
 $rconFiles = new MinecraftServer($rconFake, $rconFake, $rconFake);
 $rcon = new ServerRcon($rconFiles);
-check('rcon off', $rcon->status($rconServer), ['enabled' => false, 'port' => 25575, 'allocated' => false, 'ports' => [25580, 25590]]);
+check('rcon off', $rcon->status($rconServer), ['enabled' => false, 'port' => 25575, 'allocated' => false, 'password' => false, 'ports' => [25580, 25590]]);
 check('rcon off runs nothing', $rcon->run($rconServer, ['list']), null);
-throws('rcon refuses the game port', fn () => $rcon->enable($rconServer, 25565), 'the game or its query uses it');
-throws('rcon refuses a port of another server', fn () => $rcon->enable($rconServer, 25600), 'not one of');
-$rcon->enable($rconServer, 25590);
+throws('rcon refuses the game port', fn () => $rcon->enable($rconServer, 25565, false), 'the game or its query uses it');
+throws('rcon refuses a port of another server', fn () => $rcon->enable($rconServer, 25600, false), 'not one of');
+// Without a password yet, one is written even when the user keeps "the current one".
+$rcon->enable($rconServer, 25590, false);
 $written = Properties::parse($rconFake->files['server.properties']);
 check('rcon turned on', [$written->get('enable-rcon'), $written->get('rcon.port'), preg_match('/^[0-9a-f]{32}$/', (string) $written->get('rcon.password')), $written->get('broadcast-rcon-to-ops'), $written->get('server-port')], ['true', '25590', 1, 'false', '25565']);
-check('rcon status', array_slice($rcon->status($rconServer), 0, 3), ['enabled' => true, 'port' => 25590, 'allocated' => true]);
+check('rcon status', array_slice($rcon->status($rconServer), 0, 4), ['enabled' => true, 'port' => 25590, 'allocated' => true, 'password' => true]);
+// A password of the user's own stays, unless they ask for a new one.
+$rconFake->files['server.properties'] = $written->set('rcon.password', 'my-own-password')->contents();
+$rcon->enable($rconServer, 25580, false);
+check('rcon keeps the password', Properties::parse($rconFake->files['server.properties'])->get('rcon.password'), 'my-own-password');
+$rcon->enable($rconServer, 25590, true);
+check('rcon replaces the password on demand', preg_match('/^[0-9a-f]{32}$/', (string) Properties::parse($rconFake->files['server.properties'])->get('rcon.password')), 1);
 
 $rconFake->state = 'running';
 $rconFake->live['Steve'] = ['Health' => '7.0f', 'foodLevel' => '3'];

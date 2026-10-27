@@ -12,8 +12,10 @@ use OlivierDutoit\Minecraft\MinecraftProvider;
 use OlivierDutoit\Minecraft\Models\Snapshot;
 use OlivierDutoit\Minecraft\Models\SnapshotSchedule;
 use OlivierDutoit\Minecraft\Players\World;
+use OlivierDutoit\Minecraft\Rcon\RconException;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
 use OlivierDutoit\Minecraft\Server\ServerConsole;
+use OlivierDutoit\Minecraft\Server\ServerRcon;
 use Pterodactyl\Contracts\Servers\SendsServerPower;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 use Pterodactyl\Facades\Extensions;
@@ -24,10 +26,10 @@ use Throwable;
 /**
  * World snapshots: archives of world folders kept in the server's .snapshots folder.
  *
- * A snapshot of a running server turns autosaving off and flushes the world first, so the archive is
- * whole. A restore stops the server, keeps a snapshot of what it replaces when asked, sets the current
- * folders aside (a rename), extracts the archive, and only then deletes the folders it set aside; if
- * the extraction fails they are put back. Everything that touches snapshots runs under one lock per
+ * A snapshot of a running server turns autosaving off and flushes the world first (over RCON when it
+ * answers, else through the console), so the archive is whole. A restore stops the server, keeps a
+ * snapshot of what it replaces when asked, sets the current folders aside (a rename), extracts the
+ * archive, and only then deletes the folders it set aside; if the extraction fails they are put back. Everything that touches snapshots runs under one lock per
  * server.
  */
 final class Snapshots
@@ -36,10 +38,12 @@ final class Snapshots
     /** Wings' state is cached for up to 20 seconds: a reading is trusted once it is newer than that. */
     public static int $stateCacheSeconds = 22;
     private const string SAVED = '/^(Saved the (game|world)|Save complete|ThreadedAnvilChunkStorage.*All dimensions are saved)/i';
+    private const int SAVE_SECONDS = 120;
 
     public function __construct(
         private readonly MinecraftServer $files,
         private readonly ServerConsole $console,
+        private readonly ServerRcon $rcon,
         private readonly SendsServerPower $power,
         private readonly WorldFiles $archives,
         private readonly Worlds $worlds,
@@ -163,8 +167,8 @@ final class Snapshots
         if ($running) {
             // No autosave while the folders are read, and everything on disk first.
             $progress(10, 'Saving the world…');
-            $this->console->send($server, ['save-off']);
-            if ($this->console->sendAndWait($server, 'save-all flush', self::SAVED, 120.0) === null) {
+            $this->save($server, 'save-off');
+            if (! $this->saveAll($server)) {
                 $this->saveOn($server);
                 throw new RuntimeException('The server did not confirm saving the world.');
             }
@@ -199,10 +203,44 @@ final class Snapshots
     private function saveOn(Server $server): void
     {
         try {
-            $this->console->send($server, ['save-on']);
+            $this->save($server, 'save-on');
         } catch (Throwable) {
             // The server stopped meanwhile: it saves normally at its next start.
         }
+    }
+
+    /** `save-off` or `save-on`: over RCON when it answers, else to the console. Sending one twice is harmless. */
+    private function save(Server $server, string $command): void
+    {
+        try {
+            if ($this->rcon->run($server, [$command]) !== null) {
+                return;
+            }
+        } catch (RconException) {
+            // The console takes over.
+        }
+        $this->console->send($server, [$command]);
+    }
+
+    /**
+     * `save-all flush`, and whether the server confirmed it: over RCON when it answers (the answer
+     * comes once the world is on disk), else read back from the console.
+     */
+    private function saveAll(Server $server): bool
+    {
+        // Saving twice is harmless, so any RCON failure hands over to the console.
+        try {
+            $answer = $this->rcon->run($server, ['save-all flush'], self::SAVE_SECONDS)[0] ?? null;
+        } catch (RconException) {
+            $answer = null;
+        }
+        foreach (preg_split('/\R/', $answer ?? '') ?: [] as $line) {
+            if (preg_match(self::SAVED, trim($line))) {
+                return true;
+            }
+        }
+
+        return $this->console->sendAndWait($server, 'save-all flush', self::SAVED, self::SAVE_SECONDS) !== null;
     }
 
     private function deleteUnlocked(Server $server, Snapshot $snapshot): void

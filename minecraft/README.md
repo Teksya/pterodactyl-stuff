@@ -36,11 +36,14 @@ last seen, status (*Online*, *Offline* or *Banned*), operator, and the row's act
   coordinates in a dimension), game mode, effects, heal, feed, give an item, experience, whitelist
   and kill.
 
-**Online, actions are console commands; offline, they edit the player's file.** A player who is
-away gets their game mode, health, food, place, items, effects and levels changed in
-`world/playerdata/<uuid>.dat`, and finds them when they join. Messages, effects, kicks and kills
-need the player online. The lists (operators, whitelist, bans) go through the console while the
-server runs and are edited as files while it is stopped.
+**Online, actions are commands; offline, they edit the player's file.** Commands go over RCON
+when it is on and answers: they run at once, the toast shows the server's answer, and nothing
+appears in the console. Otherwise they are typed in the console. A command RCON took but did not
+answer is never typed again, since it may have run. A player who is away gets their game mode,
+health, food, place, items, effects and levels changed in `world/playerdata/<uuid>.dat`, and finds
+them when they join. Messages, effects, kicks and kills need the player online. The lists
+(operators, whitelist, bans) go through commands while the server runs and are edited as files
+while it is stopped.
 
 **A player who is online is read live over RCON, as the plugin does**, from 1.13: one
 `data get entity <name> <field>` per field (health, inventory, ender chest, effects…) on one
@@ -52,10 +55,11 @@ address, the node's FQDN, then `127.0.0.1` and `localhost`, remembers the one th
 leaves RCON for a minute when none does.
 
 **⋯ → Faster live data (RCON)…** (or **Turn on RCON** in a player's Status) turns it on, on one of
-the server's allocation ports the game does not use, with a new random password; it starts with
-the server's next start. Without a free allocation, add one in the Network tab first. The actions
-that need an online player's inventory (moving an item, giving one into a slot) still read it back
-from the console when RCON is off.
+the server's allocation ports the game does not use; it starts with the server's next start. When
+server.properties already has an RCON password, the dialog asks whether to keep it (the default)
+or replace it with a new random one; without one, it writes a random one. Without a free
+allocation, add one in the Network tab first. The actions that need an online player's inventory
+(moving an item, giving one into a slot) still read it back from the console when RCON is off.
 
 Every version works, from 1.8 to 26.x. Each file is looked for where the world keeps it: player
 files in `playerdata` and `stats` until 1.21.11 and in `players/data` and `players/stats` from 26.1,
@@ -70,8 +74,8 @@ items.
 ### Who is online
 
 The panel asks the game the way the multiplayer screen does (the server list ping), which names
-up to twelve players. Beyond twelve, or when the server hides its players, it runs `list` in the
-console and reads the answer (chat lines that look like it are ignored). The ping goes to the main
+up to twelve players. Beyond twelve, or when the server hides its players, it runs `list` over
+RCON, or else in the console and reads the answer (chat lines that look like it are ignored). The ping goes to the main
 allocation's address; for an allocation on every address (`0.0.0.0`) it goes to the node's FQDN, or
 to **Server address for the status ping** in Admin → Extensions → Minecraft.
 
@@ -94,7 +98,7 @@ time of day, hardcore); while the server runs, weather, time, difficulty, saving
   one that is not active.
 - **Snapshots**: a copy of a world (with its Nether and End) kept in the server's `.snapshots`
   folder. **Take a snapshot** while the server runs: autosaving pauses and the world is flushed to
-  disk while it is copied, so the copy is whole. **Restore** in one click: the server stops, the
+  disk while it is copied (over RCON when it is on, else through the console), so the copy is whole. **Restore** in one click: the server stops, the
   current worlds are set aside (renamed), the snapshot is extracted, and only then are the worlds
   set aside deleted; if the extraction fails they are put back. The server starts again if it was
   running. By default a snapshot of the worlds as they were is kept first, so a restore can be
@@ -143,7 +147,7 @@ limits, one line of text).
 Upload `pterodactyl-minecraft-<version>.zip` in Admin → Extensions, or on the panel host:
 
 ```bash
-php artisan p:extension:install pterodactyl-minecraft-1.0.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-minecraft-1.1.0.zip --enable --replace
 ```
 
 The server icon needs PHP's GD extension, which the panel already requires.

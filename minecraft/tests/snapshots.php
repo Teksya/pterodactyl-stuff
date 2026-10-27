@@ -17,6 +17,7 @@ use OlivierDutoit\Minecraft\Models\Snapshot;
 use OlivierDutoit\Minecraft\Players\World;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
 use OlivierDutoit\Minecraft\Server\ServerConsole;
+use OlivierDutoit\Minecraft\Server\ServerRcon;
 use OlivierDutoit\Minecraft\Worlds\Snapshots;
 use OlivierDutoit\Minecraft\Worlds\WorldFiles;
 use OlivierDutoit\Minecraft\Worlds\Worlds;
@@ -42,7 +43,7 @@ $files = new MinecraftServer($fake, $fake, $fake);
 $console = new ServerConsole($fake, new Logs($fake), new State($fake));
 $worldFiles = new WorldFiles($archives, $archives, $archives, $archives, $archives);
 $worlds = new Worlds($files, new World($files), $worldFiles);
-$snapshots = new Snapshots($files, $console, $power, $worldFiles, $worlds, new World($files));
+$snapshots = new Snapshots($files, $console, new ServerRcon($files), $power, $worldFiles, $worlds, new World($files));
 $steps = [];
 $progress = function (int $percent, string $message) use (&$steps): void {
     $steps[] = $percent;
