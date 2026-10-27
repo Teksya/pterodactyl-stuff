@@ -12,7 +12,7 @@ class ConsolePlusProvider extends ExtensionProvider
 
     public function boot(): void
     {
-        // routes/server.php: the signed-in user's console preferences for a server.
+        // routes/server.php: the signed-in user's console preferences for a server, and its game.
         $this->registerApiRoutes();
     }
 }

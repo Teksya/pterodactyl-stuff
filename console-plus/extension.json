@@ -2,8 +2,8 @@
     "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
     "id": "console-plus",
     "name": "Console Plus",
-    "version": "1.0.0",
-    "description": "A console you can read and a fuller console page: search, level filters, colours, folded stack traces, clickable links, favourite commands, saved history, log download, and live cards and graphs over up to an hour.",
+    "version": "1.1.0",
+    "description": "A console you can read and a fuller console page: search, level filters, colours, folded stack traces, clickable links, command completion for each game, favourite commands, saved history, log download, and live cards and graphs over up to an hour.",
     "author": "Olivier DUTOIT",
     "icon": "square-terminal",
     "requires": {

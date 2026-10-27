@@ -77,9 +77,8 @@ test('finds searches, links and server files', () => {
     expect(remember(['a', 'b'], 'a')).toEqual(['b', 'a']);
 });
 
-function Harness() {
+function Harness({ submit = vi.fn() }: { submit?: () => void }) {
     const [value, setValue] = useState('');
-    const submit = vi.fn();
     const model = {
         Terminal: () => null,
         loading: false,
@@ -132,4 +131,61 @@ test('shows live output with its level, filters and searches it', async () => {
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search the console' }), { key: 'Escape' });
     expect(screen.queryByRole('textbox', { name: 'Search the console' })).toBeNull();
     screen.getByRole('button', { name: 'Open the toolbar' });
+});
+
+test("completes the game's commands in the command line, beside the history", { timeout: 15000 }, async () => {
+    vi.spyOn(http, 'get').mockImplementation(async (url: string) => {
+        if (url.endsWith('/game')) return { data: { data: { egg: 'Paper', tags: ['minecraft'], variables: { MINECRAFT_VERSION: '1.21.4' } } } };
+        if (url.endsWith('/preferences')) return { data: { data: { history: ['list'] } } };
+
+        return { data: { data: {} } };
+    });
+    vi.spyOn(http, 'put').mockResolvedValue({ data: {} });
+    const submit = vi.fn();
+    host = createExtensionTestHost({ server: createTestServer({ name: 'Survival', eggTags: ['minecraft'] }), prefix: 'cx' });
+    render(<Harness submit={submit} />, { wrapper: host.Wrapper });
+
+    const line = (await screen.findByRole('combobox', { name: 'Console command input.' })) as HTMLInputElement;
+    await waitFor(() => expect(screen.queryByRole('log')).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    act(() => host!.emitWebsocket(SocketEvent.CONSOLE_OUTPUT, '[12:00:05] [Server thread/INFO]: Steve joined the game'));
+    await screen.findByText(/Steve joined the game/);
+
+    // The arrows bring the history back while no suggestion shows.
+    await waitFor(() => {
+        fireEvent.keyDown(line, { key: 'ArrowUp' });
+        expect(line.value).toBe('list');
+    });
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    fireEvent.change(line, { target: { value: 'gamem' } });
+    // The game's commands load once the API names the egg (Minecraft's are their own chunk).
+    const options = () => screen.queryAllByRole('option').map((item) => item.firstChild?.textContent);
+    await waitFor(() => expect(options()).toEqual(['gamemode']), { timeout: 5000 });
+    expect(screen.getByRole('option').getAttribute('aria-selected')).toBe('true');
+    screen.getByText('Minecraft 1.21.4');
+
+    fireEvent.keyDown(line, { key: 'Tab' });
+    await waitFor(() => expect(line.value).toBe('gamemode '));
+    expect(options()).toEqual(['survival', 'creative', 'adventure', 'spectator']);
+    // After a space nothing is picked: the arrows pick, Enter takes.
+    fireEvent.keyDown(line, { key: 'ArrowDown' });
+    fireEvent.keyDown(line, { key: 'ArrowDown' });
+    fireEvent.keyDown(line, { key: 'Enter' });
+    await waitFor(() => expect(line.value).toBe('gamemode creative '));
+    expect(submit).not.toHaveBeenCalled();
+    await waitFor(() => expect(options()[0]).toBe('Steve'));
+
+    fireEvent.change(line, { target: { value: 'gamemode creative St' } });
+    fireEvent.keyDown(line, { key: 'Enter' });
+    await waitFor(() => expect(line.value).toBe('gamemode creative Steve'));
+
+    // Escape closes the suggestions, then Enter sends the line.
+    fireEvent.change(line, { target: { value: 'gamemode creative Steve ' } });
+    fireEvent.change(line, { target: { value: 'gamemode creative Stev' } });
+    await screen.findByRole('listbox');
+    fireEvent.keyDown(line, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.keyDown(line, { key: 'Enter' });
+    expect(submit).toHaveBeenCalledTimes(1);
 });

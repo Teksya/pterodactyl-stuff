@@ -4,6 +4,7 @@
         "module": "ESNext",
         "moduleResolution": "bundler",
         "preserveSymlinks": true,
+        "resolveJsonModule": true,
         "jsx": "react-jsx",
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "types": ["vite/client"],

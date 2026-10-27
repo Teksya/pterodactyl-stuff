@@ -14,6 +14,7 @@ import {
 import { useSkin, type ViewProps } from '@pterodactyl/sdk/theme';
 import ChoiceMenu from './ChoiceMenu';
 import CommandBar from './CommandBar';
+import { useGame } from './completion/useGame';
 import { find } from './decorate';
 import { asText, countLevels, entries as toEntries, matcher } from './lines';
 import LogView from './LogView';
@@ -44,8 +45,9 @@ const TOGGLES: { key: 'timestamps' | 'wrap' | 'traces' | 'repeats' | 'toolbar' |
 
 /**
  * The server's console as text: searchable, filtered by level, coloured, with folded stack
- * traces, clickable links and files, hidden noise and highlighted words, a saved command history
- * and favourite commands. In place of the panel's terminal, under the same command permissions.
+ * traces, clickable links and files, hidden noise and highlighted words, a saved command history,
+ * favourite commands and the game's commands completed as they are typed. In place of the panel's
+ * terminal, under the same command permissions.
  */
 export default function ConsoleView({ model, className }: ViewProps<'server.terminal'>) {
     const server = useCurrentServer();
@@ -53,6 +55,7 @@ export default function ConsoleView({ model, className }: ViewProps<'server.term
     const identifier = server?.attributes.identifier ?? '';
     const navigate = usePanelNavigate();
     const { lines, loading, clear } = useConsoleLines(uuid);
+    const game = useGame(uuid, lines);
     const { preferences, update } = usePreferences(uuid);
     const view = preferences.view;
     const setView = (change: Partial<Preferences['view']>) => update((current) => ({ ...current, view: { ...current.view, ...change } }));
@@ -298,6 +301,7 @@ export default function ConsoleView({ model, className }: ViewProps<'server.term
                     command={model.command}
                     history={preferences.history}
                     favourites={preferences.favourites}
+                    game={game}
                     onSent={(sent) => update((current) => ({ ...current, history: remember(current.history, sent) }))}
                     onFavourite={(favourite) => update((current) => ({ ...current, favourites: [...current.favourites, favourite].slice(0, 50) }))}
                 />
