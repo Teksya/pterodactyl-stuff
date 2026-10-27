@@ -15,6 +15,14 @@ export const itemClass = [
     'focus-visible:outline-2 focus-visible:outline-ring',
 ].join(' ');
 
+/** A link of the top bar, tinted like the sidebar's when active. */
+export const barItemClass = [
+    'flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap no-underline',
+    'text-muted-foreground transition-colors hover:bg-popover/70 hover:text-foreground',
+    'data-[status=active]:bg-primary/12 data-[status=active]:text-foreground data-[status=active]:[&_svg]:text-primary',
+    'focus-visible:outline-2 focus-visible:outline-ring',
+].join(' ');
+
 export const iconButtonClass = [
     'flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0',
     'text-muted-foreground transition-colors hover:bg-popover/70 hover:text-foreground',

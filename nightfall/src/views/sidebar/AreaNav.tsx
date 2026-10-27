@@ -16,10 +16,10 @@ import ServerSwitcher, { states } from '../ServerSwitcher';
 import { useStoredList } from './storage';
 import { headingClass, itemClass, railHidden, railSrOnly } from './styles';
 
-type Area = AccountArea | ServerArea | AdminArea;
+export type Area = AccountArea | ServerArea | AdminArea;
 
 /** The slots of an area's navigation, which its own layout renders in classic. */
-function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; compact: boolean }) {
+export function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; compact: boolean }) {
     if (area.kind === 'server') return <Slot name={`server.navigation.${at}`} data={area.server} compact={compact} />;
     if (area.kind === 'account') return <Slot name={`account.navigation.${at}`} compact={compact} />;
 
@@ -28,20 +28,28 @@ function AreaSlot({ area, at, compact }: { area: Area; at: 'before' | 'after'; c
 
 const noItems: readonly NavItem[] = [];
 
+/** The pages of an area, with a server's admin page last for those who may open it. */
+export function areaItems(area: AppArea): readonly NavItem[] {
+    if (area.kind === 'dashboard') return noItems;
+
+    return area.kind === 'server' && area.adminLink ? [...area.nav.items, area.adminLink] : area.nav.items;
+}
+
+export const areaLabels = { server: 'Server', account: 'Account', admin: 'Administration' } as const;
+
 /**
  * The pages of the area the user is in. Where a group of items starts, a heading that folds the
  * group; the group of the page in view stays open, and the rail shows every item.
  */
 export default function AreaNav({ area, rail }: { area: AppArea; rail: boolean }) {
-    const items: readonly NavItem[] =
-        area.kind === 'dashboard' ? noItems : area.kind === 'server' && area.adminLink ? [...area.nav.items, area.adminLink] : area.nav.items;
+    const items = areaItems(area);
     const current = useActiveNavItem(items);
     // Shell keys this by area, so each area reads its own folded groups.
     const [folded, toggle] = useStoredList(`nightfall:folded-groups:${area.kind}`);
 
     if (area.kind === 'dashboard') return null;
 
-    const label = { server: 'Server', account: 'Account', admin: 'Administration' }[area.kind];
+    const label = areaLabels[area.kind];
     const groupStarts = new Set(items.filter((item, index) => item.group && item.group !== items[index - 1]?.group));
     const state = area.kind === 'server' && area.state ? states[area.state] : null;
     const isFolded = (group: string | null) => !rail && group !== null && group !== current?.group && folded.includes(group);

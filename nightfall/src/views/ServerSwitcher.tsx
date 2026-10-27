@@ -30,22 +30,48 @@ const SEARCH_FROM = 9;
 const STATE_LIMIT = 30;
 
 const serversKey = ['nightfall', 'servers'] as const;
+const adminServersKey = ['nightfall', 'servers', 'admin'] as const;
 
 interface ServerPage {
     data: SdkServer[];
     meta: { pagination: { total_pages: number } };
 }
 
-/** The servers the user owns or is a subuser of, as the dashboard lists them by default. */
-async function listServers(): Promise<SdkServer[]> {
+/**
+ * The servers the user owns or is a subuser of, as the dashboard lists them by default; with
+ * `admin`, the other users' servers a root administrator may open.
+ */
+async function listServers(type?: 'admin'): Promise<SdkServer[]> {
     const page = (number: number) =>
-        http.get<ServerPage>('/api/client', { params: { page: number, per_page: PAGE_SIZE } }).then((response) => response.data);
+        http.get<ServerPage>('/api/client', { params: { page: number, per_page: PAGE_SIZE, type } }).then((response) => response.data);
 
     const first = await page(1);
     const pages = Math.min(first.meta.pagination.total_pages, MAX_PAGES);
     const rest = await Promise.all(Array.from({ length: Math.max(pages - 1, 0) }, (_, index) => page(index + 2)));
 
     return [first, ...rest].flatMap((result) => result.data);
+}
+
+/**
+ * The servers on the same side as the one in view: the user's own when they own it; otherwise the
+ * ones they do not own, shared with them first, then (for root administrators) other users'.
+ */
+function useServers(owned: boolean) {
+    const mine = useQuery({ queryKey: serversKey, queryFn: () => listServers(), staleTime: 30_000 });
+    // Other users' servers are for root administrators: anyone else gets none, refused or not.
+    const admin = useQuery({
+        queryKey: adminServersKey,
+        queryFn: () => listServers('admin').catch((): SdkServer[] => []),
+        staleTime: 30_000,
+        enabled: !owned,
+    });
+
+    const isPending = mine.isPending || (!owned && admin.isPending);
+    const side = (mine.data ?? []).filter(({ attributes }) => attributes.server_owner === owned);
+    const listed = new Set(side.map(({ attributes }) => attributes.uuid));
+    const data = owned ? side : [...side, ...(admin.data ?? []).filter(({ attributes }) => !attributes.server_owner && !listed.has(attributes.uuid))];
+
+    return { isPending, isError: mine.isError, error: mine.error, data };
 }
 
 /** A server's pages, with the permissions their routes ask for (any one of them). */
@@ -96,12 +122,13 @@ const noteClass = 'px-2.5 py-2 text-sm text-muted-foreground';
  * the cache entry the dashboard polls, so a fresh one is reused) and never polled from here.
  */
 function ServerList({ area }: { area: ServerArea }) {
-    const servers = useQuery({ queryKey: serversKey, queryFn: listServers, staleTime: 30_000 });
+    const owned = area.server.attributes.server_owner;
+    const servers = useServers(owned);
     const { pathname } = usePanelLocation();
     const [term, setTerm] = useState('');
 
     const search = term.trim().toLowerCase();
-    const shown = (servers.data ?? []).filter(({ attributes }) => !search || attributes.name.toLowerCase().includes(search));
+    const shown = servers.data.filter(({ attributes }) => !search || attributes.name.toLowerCase().includes(search));
     const others = shown.filter(({ attributes }) => attributes.identifier !== area.identifier).slice(0, STATE_LIMIT);
     const resources = useQueries({
         queries: others.map(({ attributes }) => ({ ...serverResourcesQueryOptions(attributes.uuid), staleTime: 20_000 })),
@@ -136,7 +163,7 @@ function ServerList({ area }: { area: ServerArea }) {
                     <Search aria-hidden className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground' />
                     <Input
                         type='search'
-                        aria-label='Search your servers'
+                        aria-label={owned ? 'Search your servers' : 'Search other servers'}
                         placeholder='Search'
                         value={term}
                         onChange={(event) => setTerm(event.target.value)}
@@ -176,7 +203,10 @@ function ServerList({ area }: { area: ServerArea }) {
     );
 }
 
-/** A menu of the user's servers that opens on the same page of another, from the server card or the rail. */
+/**
+ * A menu of the servers on the same side as the one in view (the user's own, or the others) that
+ * opens on the same page of another, from the server card or the rail.
+ */
 export default function ServerSwitcher({
     area,
     triggerClassName,

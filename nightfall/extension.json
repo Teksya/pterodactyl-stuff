@@ -3,8 +3,8 @@
     "id": "nightfall",
     "type": "theme",
     "name": "Nightfall",
-    "version": "1.3.0",
-    "description": "A near-black and a light scheme, a sidebar for every navigation, softer components and a split-screen sign-in, over classic.",
+    "version": "1.4.0",
+    "description": "A near-black and a light scheme, a sidebar or a top bar for every navigation, softer components and a split-screen sign-in, over classic.",
     "author": "Olivier DUTOIT",
     "icon": "log-in",
     "requires": {
@@ -34,7 +34,7 @@
             "logo": {
                 "type": "image",
                 "label": "Logo",
-                "help": "Shown in the sidebar and on the sign-in pages in place of the panel's name.",
+                "help": "Shown in place of the Pterodactyl mark, beside the panel's name, in the navigation and on the sign-in pages.",
                 "token": "--brand-logo"
             },
             "tagline": {

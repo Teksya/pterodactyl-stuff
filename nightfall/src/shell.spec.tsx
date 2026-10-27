@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import {
     Button,
     Card,
@@ -30,18 +30,46 @@ afterEach(() => {
     queryClient.clear();
 });
 
-/** Answers the client API's server list with `servers`, on one page, and every server as offline. */
-function serveServers(servers: SdkServer[]) {
+/**
+ * Answers the client API's server list with `servers` (with `admin` for `type=admin`), on one page,
+ * and every server as offline.
+ */
+function serveServers(servers: SdkServer[], admin: SdkServer[] = []) {
     const offline = { object: 'stats', attributes: { current_state: 'offline' } } as SdkServerResources;
     // States come through the generated API client, as the dashboard asks for them.
     vi.spyOn(client, 'get').mockImplementation((async () => ({ data: offline })) as unknown as typeof client.get);
 
-    return vi.spyOn(http, 'get').mockImplementation(async (url: string) => {
-        if (url === '/api/client') return { data: { object: 'list', data: servers, meta: { pagination: { total_pages: 1 } } } };
+    return vi.spyOn(http, 'get').mockImplementation(async (url, config) => {
+        const data = (config?.params as { type?: string } | undefined)?.type === 'admin' ? admin : servers;
+        if (url === '/api/client') return { data: { object: 'list', data, meta: { pagination: { total_pages: 1 } } } };
 
         throw new Error(`Unexpected ${url}`);
     });
 }
+
+/** A layer that makes the server in view one the user owns, or not. */
+const owning = (owned: boolean) =>
+    ({
+        views: {
+            'layout.app': ({ model, Default, children }: ViewProps<'layout.app'>) => (
+                <Default
+                    model={
+                        model.area.kind === 'server'
+                            ? {
+                                  ...model,
+                                  area: {
+                                      ...model.area,
+                                      server: { ...model.area.server, attributes: { ...model.area.server.attributes, server_owner: owned } },
+                                  },
+                              }
+                            : model
+                    }
+                >
+                    {children}
+                </Default>
+            ),
+        },
+    }) as unknown as ThemeDefinition;
 
 const probe = () => <span>probe</span>;
 
@@ -176,12 +204,105 @@ test('opens the sidebar as a drawer from the menu button, and closes it on Escap
     expect(document.body.style.overflow).toBe('');
 });
 
-test('offers the scheme menu only when the theme has both schemes', () => {
+test('offers the schemes in the appearance menu only when the theme has both, and the navigation always', async () => {
     rendered = renderView('layout.app', { themes, fixture: 'user' });
-    expect(screen.queryByRole('button', { name: 'Color scheme' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitemcheckbox', { name: /Dark/ })).toBeNull();
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Sidebar/ }).getAttribute('aria-checked')).toBe('true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Top bar/ }).getAttribute('aria-checked')).toBe('false');
+    rendered.unmount();
+    cleanup();
 
     rendered = renderView('layout.app', { themes, fixture: 'schemes' });
-    expect(screen.getByRole('button', { name: 'Color scheme' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Dark/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Top bar/ })).toBeTruthy();
+});
+
+test("opens each group of the top bar's area row as a folder, the others staying links", async () => {
+    localStorage.setItem('nightfall.layout', 'topbar');
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }),
+    });
+    // The admin pages after the first two in a folder, as Admin Sidebar puts them.
+    const grouping = {
+        views: {
+            'layout.app': ({ model, Default, children }: ViewProps<'layout.app'>) => (
+                <Default
+                    model={
+                        model.area.kind === 'admin'
+                            ? { ...model, area: { ...model.area, nav: { items: model.area.nav.items.map((item, index) => ({ ...item, group: index < 2 ? null : 'Folder A' })) } } }
+                            : model
+                    }
+                >
+                    {children}
+                </Default>
+            ),
+        },
+    } as unknown as ThemeDefinition;
+
+    try {
+        rendered = renderView('layout.app', { themes: [theme, grouping], fixture: 'adminArea' });
+        const row = within(document.getElementById('nightfall-topbar')!).getByRole('navigation', { name: 'Administration' });
+        const links = within(row).getAllByRole('link');
+        expect(links).toHaveLength(2);
+
+        // The folder's pages are links in its menu.
+        fireEvent.click(within(row).getByRole('button', { name: /Folder A/ }));
+        const pages = within(await screen.findByRole('menu')).getAllByRole('menuitem');
+        expect(pages.length).toBeGreaterThan(2);
+        expect(pages[0].getAttribute('href')).toMatch(/^\/panel\//);
+    } finally {
+        localStorage.removeItem('nightfall.layout');
+        Reflect.deleteProperty(window, 'matchMedia');
+    }
+});
+
+test('puts the navigation in a bar above the page once chosen, on large screens only, and remembers it', async () => {
+    localStorage.removeItem('nightfall.layout');
+    let wide = true;
+    const matchMedia = vi.fn(() => ({ matches: wide, addEventListener: () => {}, removeEventListener: () => {} }));
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
+
+    try {
+        rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+        expect(document.getElementById('nightfall-sidebar')).not.toBeNull();
+        expect(document.getElementById('nightfall-topbar')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+        fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /Top bar/ }));
+        await waitFor(() => expect(document.getElementById('nightfall-topbar')).not.toBeNull());
+        expect(localStorage.getItem('nightfall.layout')).toBe('topbar');
+
+        // One frame only: the sidebar is gone, so the search and the server menu are there once.
+        const bar = document.getElementById('nightfall-topbar')!;
+        expect(document.getElementById('nightfall-sidebar')).toBeNull();
+        expect(within(bar).getByRole('navigation', { name: 'Main' }).textContent).toContain('Dashboard');
+        const server = within(bar).getByRole('navigation', { name: 'Server' });
+        expect(server.textContent).toContain('Backups');
+        expect(within(server).getAllByRole('button', { name: /Switch server/ })).toHaveLength(1);
+        expect(within(server).getByRole('button', { name: /Switch server/ }).textContent).toContain('Survival');
+        expect(await screen.findAllByRole('button', { name: /^Search/ })).toHaveLength(1);
+        expect(within(bar).getByRole('button', { name: 'Sign out' })).toBeTruthy();
+        rendered.unmount();
+        cleanup();
+
+        // Remembered; on a narrow window the navigation stays in the drawer.
+        rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+        expect(document.getElementById('nightfall-topbar')).not.toBeNull();
+        rendered.unmount();
+        cleanup();
+        wide = false;
+        rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+        expect(document.getElementById('nightfall-topbar')).toBeNull();
+        expect(document.getElementById('nightfall-sidebar')).not.toBeNull();
+    } finally {
+        localStorage.removeItem('nightfall.layout');
+        Reflect.deleteProperty(window, 'matchMedia');
+    }
 });
 
 test('draws the server navigation, with its state and its slots, in the sidebar', () => {
@@ -200,10 +321,10 @@ test('draws the server navigation, with its state and its slots, in the sidebar'
 });
 
 test("switches to another server from the server card's menu, the current one checked", async () => {
-    const current = createTestServer({ identifier: 'srv-current', name: 'Survival', permissions: ['*'] });
-    const other = createTestServer({ identifier: 'lobby1', uuid: '22222222-2222-4222-8222-222222222222', name: 'Lobby', permissions: ['*'] });
+    const current = createTestServer({ identifier: 'srv-current', name: 'Survival', permissions: ['*'], owner: true });
+    const other = createTestServer({ identifier: 'lobby1', uuid: '22222222-2222-4222-8222-222222222222', name: 'Lobby', permissions: ['*'], owner: true });
     // The fixture's server is the one in view, whatever its identifier.
-    rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+    rendered = renderView('layout.app', { themes: [theme, owning(true)], fixture: 'serverArea' });
     const identifier = screen.getByRole('navigation', { name: 'Server' }).querySelector('a')?.getAttribute('href')?.split('/')[2];
     const get = serveServers([{ ...current, attributes: { ...current.attributes, identifier: identifier ?? 'srv-current' } }, other]);
 
@@ -235,10 +356,15 @@ test("switches to another server from the server card's menu, the current one ch
 
 test('searches the switcher once there are more than eight servers', async () => {
     const servers = Array.from({ length: 12 }, (_, index) =>
-        createTestServer({ identifier: `srv${index}`, uuid: `0000000${index}-0000-4000-8000-000000000000`, name: index % 2 ? `Lobby ${index}` : `Survival ${index}` })
+        createTestServer({
+            identifier: `srv${index}`,
+            uuid: `0000000${index}-0000-4000-8000-000000000000`,
+            name: index % 2 ? `Lobby ${index}` : `Survival ${index}`,
+            owner: true,
+        })
     );
     serveServers(servers);
-    rendered = renderView('layout.app', { themes, fixture: 'serverArea' });
+    rendered = renderView('layout.app', { themes: [theme, owning(true)], fixture: 'serverArea' });
 
     fireEvent.click(screen.getAllByRole('button', { name: /Switch server/ })[1]);
     const menu = await screen.findByRole('menu');
@@ -255,6 +381,37 @@ test('searches the switcher once there are more than eight servers', async () =>
     fireEvent.change(field, { target: { value: 'nether' } });
     expect(within(menu).queryAllByRole('menuitem')).toHaveLength(0);
     expect(menu.textContent).toContain('No servers match.');
+});
+
+test("lists the user's own servers from one of theirs, the others from someone else's", async () => {
+    const server = (n: number, name: string, owner: boolean) =>
+        createTestServer({ identifier: `srv${n}`, uuid: `0000000${n}-0000-4000-8000-000000000000`, name, owner });
+    const mine = [server(1, 'Mine A', true), server(2, 'Shared B', false), server(3, 'Mine C', true)];
+    const admin = [server(4, 'Client D', false), server(2, 'Shared B', false)];
+    const names = (menu: HTMLElement) => within(menu).getAllByRole('menuitem').map((item) => item.textContent?.replace(/\(.*\)$/, ''));
+
+    let get = serveServers(mine, admin);
+    rendered = renderView('layout.app', { themes: [theme, owning(true)], fixture: 'serverArea' });
+    fireEvent.click(screen.getAllByRole('button', { name: /Switch server/ })[0]);
+    let menu = await screen.findByRole('menu');
+    await within(menu).findAllByRole('menuitem');
+    expect(names(menu)).toEqual(['Mine A', 'Mine C']);
+    // Other users' servers are not asked for from one of the user's own.
+    expect(get).not.toHaveBeenCalledWith('/api/client', expect.objectContaining({ params: expect.objectContaining({ type: 'admin' }) }));
+
+    rendered.unmount();
+    cleanup();
+    vi.restoreAllMocks();
+    queryClient.clear();
+
+    get = serveServers(mine, admin);
+    rendered = renderView('layout.app', { themes: [theme, owning(false)], fixture: 'serverArea' });
+    fireEvent.click(screen.getAllByRole('button', { name: /Switch server/ })[0]);
+    menu = await screen.findByRole('menu');
+    await within(menu).findByRole('menuitem', { name: /Client D/ });
+    // Shared with the user first, then other users' servers (for root administrators), each once.
+    expect(names(menu)).toEqual(['Shared B', 'Client D']);
+    expect(get).toHaveBeenCalledWith('/api/client', { params: { page: 1, per_page: 100, type: 'admin' } });
 });
 
 test('opens the same page of the other server when its user may see it, the console otherwise', () => {

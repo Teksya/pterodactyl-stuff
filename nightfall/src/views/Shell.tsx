@@ -3,15 +3,40 @@ import { ChevronLeft, ChevronRight, LogOut, Menu, X } from 'lucide-react';
 import { Avatar, PanelLink, SpinnerOverlay, usePanelLocation } from '@pterodactyl/sdk';
 import { Main, View, cn, type ViewProps } from '@pterodactyl/sdk/theme';
 import Brand from './Brand';
+import TopBar from './TopBar';
+import AppearanceMenu from './sidebar/AppearanceMenu';
 import AreaNav from './sidebar/AreaNav';
 import MainLinks from './sidebar/MainLinks';
-import SchemeMenu from './sidebar/SchemeMenu';
-import { readFlag, writeFlag } from './sidebar/storage';
+import { readFlag, readLayout, writeFlag, writeLayout, type ShellLayout } from './sidebar/storage';
 import { iconButtonClass, railCentered, railSrOnly, scrollerClass } from './sidebar/styles';
 
 const railKey = 'nightfall.sidebar.rail';
+/** Tailwind's `lg`, from which the navigation sits beside or above the page instead of in a drawer. */
+const wideQuery = '(min-width: 64rem)';
 
-/** A sidebar beside the page on large screens, and a drawer behind a menu button below them. */
+/** Whether the window is at least `lg` wide, following it as it is resized. */
+function useWide(): boolean {
+    const media = () => (typeof window.matchMedia === 'function' ? window.matchMedia(wideQuery) : null);
+    const [wide, setWide] = useState(() => media()?.matches ?? false);
+
+    useEffect(() => {
+        const query = media();
+        if (!query) return;
+
+        const change = () => setWide(query.matches);
+        change();
+        query.addEventListener('change', change);
+
+        return () => query.removeEventListener('change', change);
+    }, []);
+
+    return wide;
+}
+
+/**
+ * The navigation in a sidebar beside the page, or in a bar above it, as each user chooses, on large
+ * screens; in a drawer behind a menu button below them.
+ */
 export default function Shell({ model, className, children }: ViewProps<'layout.app'>) {
     const { brand, user } = model;
     const account = model.links.find((link) => link.id === 'account');
@@ -19,11 +44,18 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
     const menuButton = useRef<HTMLButtonElement>(null);
     const closeButton = useRef<HTMLButtonElement>(null);
     const [rail, setRail] = useState(() => readFlag(railKey));
+    const [layout, setLayoutState] = useState(readLayout);
+    const wide = useWide();
     const { pathname } = usePanelLocation();
     const toggleRail = () => {
         setRail(!rail);
         writeFlag(railKey, !rail);
     };
+    const setLayout = (next: ShellLayout) => {
+        setLayoutState(next);
+        writeLayout(next);
+    };
+    const appearance = <AppearanceMenu model={model} layout={layout} setLayout={setLayout} />;
 
     // Close the drawer when one of its links navigates, or on Escape.
     useEffect(() => setOpen(false), [pathname]);
@@ -43,6 +75,32 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
             menuButton.current?.focus();
         };
     }, [open]);
+
+    // The page's column, under the top bar or beside the sidebar.
+    const page = (
+        /*
+         * flow-root keeps the page's top margin inside this box (on phones it is no flex item), so the
+         * glow starts at its top; the glow's centre sits above it, so it fades in with no edge.
+         */
+        <div className='relative flow-root min-w-0 flex-1'>
+            <div
+                aria-hidden
+                className='pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-radial-[ellipse_at_50%_-25%] from-primary/12 to-transparent to-65%'
+            />
+            <Main className='min-w-0'>{children}</Main>
+        </div>
+    );
+
+    // Only one of the bar and the sidebar is mounted, so the search and its shortcut exist once.
+    if (layout === 'topbar' && wide) {
+        return (
+            <div className={cn('min-h-dvh', className)}>
+                <SpinnerOverlay visible={model.signingOut} fixed />
+                <TopBar model={model} appearance={appearance} />
+                {page}
+            </div>
+        );
+    }
 
     return (
         <div className={cn('min-h-dvh lg:flex', className)}>
@@ -145,24 +203,14 @@ export default function Shell({ model, className, children }: ViewProps<'layout.
                             <span className='block truncate text-xs text-muted-foreground'>{user.email}</span>
                         </span>
                     </PanelLink>
-                    {model.setScheme && <SchemeMenu model={model} setScheme={model.setScheme} />}
+                    {appearance}
                     <button type='button' onClick={model.signOut} className={iconButtonClass}>
                         <LogOut aria-hidden className='size-4' />
                         <span className='sr-only'>Sign out</span>
                     </button>
                 </div>
             </aside>
-            {/*
-              * flow-root keeps the page's top margin inside this box (on phones it is no flex item), so the
-              * glow starts at its top; the glow's centre sits above it, so it fades in with no edge.
-              */}
-            <div className='relative flow-root min-w-0 flex-1'>
-                <div
-                    aria-hidden
-                    className='pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-radial-[ellipse_at_50%_-25%] from-primary/12 to-transparent to-65%'
-                />
-                <Main className='min-w-0'>{children}</Main>
-            </div>
+            {page}
         </div>
     );
 }

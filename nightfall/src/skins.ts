@@ -58,7 +58,8 @@ export const skins: ThemeSkins = {
     }),
     DropdownMenu: skin('DropdownMenu', { root: (state, below) => below('rounded-xl shadow-2xl') }),
     DropdownMenuItem: skin('DropdownMenuItem', {
-        root: (state, below) => below('rounded-lg'),
+        // The choice in use (a scheme, a layout) shows its icon in the primary colour.
+        root: (state, below) => below('rounded-lg data-checked:[&_[data-part=icon]]:bg-primary/15 data-checked:[&_[data-part=icon]]:text-primary'),
         icon: (state, below) => below('rounded-md'),
     }),
     Tooltip: skin('Tooltip', { root: (state, below) => below('rounded-lg shadow-lg') }),

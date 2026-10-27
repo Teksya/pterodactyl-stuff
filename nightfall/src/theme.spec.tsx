@@ -83,13 +83,11 @@ test('frames the sign-in pages with the brand and a main landmark', () => {
     expect(container.textContent).toContain('Your servers, one sign-in away.');
 });
 
-test("shows the theme's logo in place of the panel's name", () => {
-    show('layout.auth', { fixture: 'logo' });
+test("shows the theme's logo in place of the mark, the panel's name still beside it", () => {
+    const container = show('layout.auth', { fixture: 'logo' });
 
-    expect(screen.getAllByRole('img', { name: 'Pterodactyl' })[0].getAttribute('src')).toBe(
-        '/favicons/android-chrome-192x192.png'
-    );
-    expect(screen.queryByText('Pterodactyl')).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('/favicons/android-chrome-192x192.png');
+    expect(screen.getAllByText('Pterodactyl').length).toBeGreaterThan(0);
 });
 
 test('keeps the login fields the engine hands over and submits through the model', () => {

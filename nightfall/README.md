@@ -8,20 +8,32 @@ components, and a split-screen sign-in.
 
 - **A sidebar** on wide screens with the brand, the server search, the navigation of the area you
   are in first (a server with its name and state, the account, or the administration, with its
-  groups, each folding from its heading; the group of the page in view stays open), then the main links (dashboard, admin, account) at its foot, which fold away behind their
-  "Panel" heading (the choice is kept in the browser), and your account, the scheme menu and
-  sign-out at the bottom. The round button on its edge folds it into a rail of icons (their names
+  groups, each folding from its heading; the group of the page in view stays open), then the main
+  links (dashboard, admin, account) at its foot, which fold away behind their "Panel" heading (the
+  choice is kept in the browser), and your account, the appearance menu and sign-out at the bottom. The round button on its edge folds it into a rail of icons (their names
   as tooltips), the Pterodactyl mark or logo, the server's initial with its state, and the avatar;
   the browser keeps the choice. On phones and narrow windows it becomes a drawer behind a menu
   button: it takes the focus, the page behind it stops scrolling, and Escape or a link closes it.
+- **Or a top bar**, which each user picks under **Navigation** in the appearance menu (the browser
+  keeps the choice): on wide screens the brand, the main links, the search, the appearance menu,
+  the avatar and sign-out sit in a bar above the page, and inside an area its pages follow on one
+  row under it (after the server switcher, with the server's state and name, in a server). Pages
+  outside any group are links; each group (an Admin Sidebar folder, for instance) is a folder whose
+  name opens a menu of its pages, tinted while one of them is open. A row still too long to fit
+  scrolls sideways, with the mouse wheel too, and keeps the page in view in sight. Phones and
+  narrow windows keep the drawer.
 - **A server switcher** on the server's card: the whole card (or the server's initial in the rail) opens
-  a menu of your servers with their state, the current one checked (it cannot be picked), with a
-  search field past eight servers. A server opens on the page you are on (its files from the files,
-  its backups from the backups) when you may see that page there, and on its console otherwise. The
-  list is fetched when the menu first opens, and the state of the first 30 servers listed (or
-  found) once each, in the same cache as the dashboard's, never polled.
+  a menu of the servers on the same side as the one in view, with their state, the current one
+  checked (it cannot be picked), with a search field past eight servers. From a server you own, it
+  lists the servers you own; from one you do not (shared with you, or another user's opened as a
+  root administrator), the servers you do not own: shared with you first, then other users'. A
+  server opens on the page you are on (its files from the files, its backups from the backups)
+  when you may see that page there, and on its console otherwise. The list is fetched when the
+  menu first opens, and the state of the first 30 servers listed (or found) once each, in the same
+  cache as the dashboard's, never polled.
 - **Dark and light schemes**. Dark is near black instead of classic's slate; each user picks
-  dark, light or system in the sidebar. The console and the file editor stay dark in both, and
+  dark, light or system in the appearance menu, where the choice in use shows its icon in the
+  primary colour. The console and the file editor stay dark in both, and
   what sits on the console (the command input, Console Plus's toolbar) takes the dark colours.
 - **Softer components** for the whole UI kit, so every page and every extension built with it
   follows: rounded buttons with sentence-case labels, rounded inputs with a soft focus ring, file fields with a primary button, cards,
@@ -48,7 +60,7 @@ On **Admin > Themes**, Nightfall's settings are:
 | --- | --- |
 | Primary colour | Buttons, links, the active sidebar item, the start of the sign-in gradient |
 | Accent colour | Highlights and the end of the sign-in gradient |
-| Logo | An image shown in the sidebar and on the sign-in pages in place of the panel's name |
+| Logo | An image shown in the sidebar, the top bar and on the sign-in pages in place of the Pterodactyl mark, beside the panel's name |
 | Sign-in tagline | The large text of the sign-in brand half |
 | Sign-in subtitle | The line under it; leave it empty to hide it |
 
@@ -102,7 +114,7 @@ The texts are in English, like the rest of the panel.
 Upload `pterodactyl-nightfall-<version>.zip` in Admin → Extensions, or on the panel host:
 
 ```bash
-php artisan p:extension:install pterodactyl-nightfall-1.3.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-nightfall-1.4.0.zip --enable --replace
 php artisan p:theme:activate nightfall
 ```
 
@@ -121,14 +133,15 @@ Settings (colours, logo, texts) do not carry over: set them again on **Admin > T
 | `src/theme.tsx` | `defineTheme`: skins and views |
 | `src/theme.css` | The panel stylesheet with Nightfall's palettes, animations and dot grid |
 | `src/skins.ts` | The UI kit recipes |
-| `src/views/Shell.tsx` | The sidebar shell and the drawer |
-| `src/views/sidebar/` | The area navigation, the main links, the scheme menu, their classes and stored choices |
+| `src/views/Shell.tsx` | The shell: the sidebar or the top bar, and the drawer |
+| `src/views/TopBar.tsx` | The top bar and its area row |
+| `src/views/sidebar/` | The area navigation, the main links, the appearance menu, their classes and stored choices |
 | `src/views/ServerSwitcher.tsx` | The server switcher |
 | `src/views/NavIcon.tsx` | Navigation icons by lucide name |
 | `src/views/Search.tsx` | The search field and dialog |
 | `src/views/FileList.tsx`, `ActivityLog.tsx` | The file list's and the activity log's cards |
 | `src/views/AreaLayout.tsx` | The area layouts |
-| `src/views/Brand.tsx`, `PterodactylMark.tsx` | The logo, or the mark and the panel's name |
+| `src/views/Brand.tsx`, `PterodactylMark.tsx` | The logo or the mark, beside the panel's name |
 | `src/views/AuthLayout.tsx` | The sign-in split screen |
 | `src/views/AuthPanel.tsx`, `Field.tsx` | The sign-in form frame and fields |
 | `src/views/*Page.tsx`, `pages.ts` | The four sign-in pages, loaded as one chunk |

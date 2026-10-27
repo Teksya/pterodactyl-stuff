@@ -17,6 +17,27 @@ export function writeFlag(key: string, value: boolean): void {
     }
 }
 
+/** Where the navigation goes: a sidebar beside the page, or a bar above it (on large screens). */
+export type ShellLayout = 'sidebar' | 'topbar';
+
+const layoutKey = 'nightfall.layout';
+
+export function readLayout(): ShellLayout {
+    try {
+        return localStorage.getItem(layoutKey) === 'topbar' ? 'topbar' : 'sidebar';
+    } catch {
+        return 'sidebar';
+    }
+}
+
+export function writeLayout(layout: ShellLayout): void {
+    try {
+        localStorage.setItem(layoutKey, layout);
+    } catch {
+        // Kept in memory only.
+    }
+}
+
 /** A list of names kept in the browser, such as the folded groups, with a toggle for one name. */
 export function useStoredList(key: string): [string[], (name: string) => void] {
     const [list, setList] = useState<string[]>(() => {
