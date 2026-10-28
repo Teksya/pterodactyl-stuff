@@ -226,6 +226,14 @@ describe('other games', () => {
         expect(detect({ egg: 'Custom Source Engine Game', tags: ['srcds'], variables: { SRCDS_GAME: 'cstrike', SRCDS_MAP: 'de_dust2' } })).toEqual({ game: 'source', kind: 'other', map: 'de_dust2' });
         // Without the extension's API, the tags and the startup command.
         expect(detect({ tags: ['srcds'], invocation: './srcds_run -game garrysmod -console' })).toMatchObject({ kind: 'gmod' });
+        // Without the egg's name or tags, the startup command alone.
+        expect(detect({ tags: [], invocation: 'java -Xms128M -XX:MaxRAMPercentage=95.0 -jar server.jar' })).toEqual({ game: 'minecraft', edition: 'java', flavours: [], version: null });
+        expect(detect({ invocation: 'java -Xms128M -Dterminal.jline=false $( [[  ! -f unix_args.txt  ]] && printf %s "-jar server.jar" || printf %s "@unix_args.txt" )' })).toMatchObject({ flavours: ['forge'] });
+        expect(detect({ invocation: 'java -Xms128M -jar velocity.jar' })).toMatchObject({ edition: 'velocity' });
+        expect(detect({ invocation: './RustDedicated -batchmode +server.port 28015' })).toEqual({ game: 'rust', framework: null });
+        expect(detect({ invocation: 'LD_LIBRARY_PATH=. ./bedrock_server' })).toMatchObject({ edition: 'bedrock' });
+        expect(detect({ egg: 'My Custom Egg', invocation: 'java -jar paper-1.21.4.jar nogui' })).toMatchObject({ game: 'minecraft', flavours: ['bukkit'] });
+        expect(detect({ invocation: './ts3server default_voice_port=9987' })).toBeNull();
         expect(detect({ egg: 'Ark: Survival Evolved', tags: ['srcds'] })).toEqual({ game: 'ark' });
         expect(detect({ egg: 'Rust', tags: ['rust'], variables: { FRAMEWORK: 'oxide' } })).toEqual({ game: 'rust', framework: 'oxide' });
         expect(detect({ egg: 'tShock', tags: [] })).toEqual({ game: 'terraria', tshock: true });

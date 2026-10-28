@@ -65,6 +65,31 @@ export function detect(info: GameInfo): Detected | null {
     if (/terraria|tshock/.test(egg)) return { game: 'terraria', tshock: /tshock/.test(egg) };
     if (tags.has('fivem') || /fivem|cfx|fxserver/.test(egg)) return { game: 'fivem' };
 
+    return byInvocation(info.invocation ?? '');
+}
+
+/**
+ * The game by its startup command alone, for an egg whose name says nothing (or when the
+ * extension's API could not answer): the binary it runs tells most games apart.
+ */
+function byInvocation(invocation: string): Detected | null {
+    if (/bedrock_server/.test(invocation)) return { game: 'minecraft', edition: 'bedrock', flavours: [], version: null };
+    if (/RustDedicated/.test(invocation)) return { game: 'rust', framework: null };
+    if (/ShooterGameServer/.test(invocation)) return { game: 'ark' };
+    if (/TerrariaServer|tshock/i.test(invocation)) return { game: 'terraria', tshock: /tshock/i.test(invocation) };
+    if (/FXServer|\+exec\s+server\.cfg/.test(invocation)) return { game: 'fivem' };
+    if (/\bjava\b|\.jar\b|unix_args\.txt/.test(invocation)) {
+        if (/velocity/i.test(invocation)) return { game: 'minecraft', edition: 'velocity', flavours: [], version: null };
+        if (/bungee|waterfall|flamecord|travertine/i.test(invocation)) return { game: 'minecraft', edition: 'bungee', flavours: [], version: null };
+        const flavours: Flavour[] = [];
+        if (/neoforge/i.test(invocation)) flavours.push('neoforge');
+        else if (/forge|unix_args\.txt/i.test(invocation)) flavours.push('forge');
+        if (/paper|spigot|bukkit|purpur|folia|pufferfish/i.test(invocation)) flavours.push('bukkit');
+        if (/sponge/i.test(invocation)) flavours.push('sponge');
+
+        return { game: 'minecraft', edition: 'java', flavours, version: null };
+    }
+
     return null;
 }
 
