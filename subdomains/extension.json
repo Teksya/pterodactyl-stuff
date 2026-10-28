@@ -1,0 +1,46 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "subdomains",
+    "name": "Subdomains",
+    "version": "1.0.0",
+    "description": "Give each server an address such as play.example.com: its DNS records (A, AAAA or CNAME, and SRV for Minecraft, TeamSpeak and Mumble) created at Cloudflare, kept in step with its allocation, and removed with it.",
+    "author": "Olivier DUTOIT",
+    "icon": "globe",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\Subdomains\\SubdomainsProvider",
+    "autoload": {
+        "OlivierDutoit\\Subdomains\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "sd",
+        "screens": [
+            {
+                "id": "admin-subdomains",
+                "area": "admin",
+                "path": "subdomains",
+                "nav": { "label": "Subdomains", "icon": "globe" }
+            },
+            {
+                "id": "admin-server-subdomains",
+                "area": "admin",
+                "parent": "admin.server",
+                "path": "subdomains",
+                "nav": { "label": "Subdomains", "icon": "globe" }
+            },
+            {
+                "id": "server-subdomains",
+                "area": "server",
+                "path": "subdomains",
+                "permission": ["ext.subdomains.read"],
+                "nav": { "label": "Subdomains", "icon": "globe" },
+                "when": { "runtime": true }
+            }
+        ]
+    }
+}

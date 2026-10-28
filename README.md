@@ -15,6 +15,7 @@ each with its own manifest, version and README.
 | [`server-organizer`](server-organizer) | `server-organizer` | Organise the dashboard's servers: folders with drag and drop, grouping by node, location or egg, owned or shared filters, your own order. |
 | [`minecraft`](minecraft) | `minecraft` | A Minecraft toolkit, from 1.8 to 26.x: players as in Pelican's Player Manager (live over RCON, inventory and ender chest, statistics, actions online and offline), worlds with snapshots and one-click restore, the game rules, `server.properties` as forms. |
 | [`file-pages`](file-pages) | `file-pages` | Every file of a folder in the file manager, in pages, instead of the first 250: page sizes up to all, a filter by name, actions on any file. |
+| [`subdomains`](subdomains) | `subdomains` | An address such as `play.example.com` for each server: A/AAAA/CNAME and SRV records made at Cloudflare, kept in step with its allocation, removed with it. |
 
 ## Install
 
