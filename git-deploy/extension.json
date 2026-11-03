@@ -1,0 +1,38 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "git-deploy",
+    "name": "Git Deploy",
+    "version": "1.0.0",
+    "description": "Deploy a server's files from GitHub, GitLab, Gitea, Forgejo or any Git repository: on every push or in one click, with the files to keep between deploys, a history of every deploy and a rollback to the previous ones. Works with any egg, no Git in the image.",
+    "author": "Olivier DUTOIT",
+    "icon": "git-branch",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.5 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "OlivierDutoit\\GitDeploy\\GitDeployProvider",
+    "autoload": {
+        "OlivierDutoit\\GitDeploy\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "prefix": "gd",
+        "screens": [
+            {
+                "id": "admin-deploys",
+                "area": "admin",
+                "path": "git-deploy",
+                "nav": { "label": "Git Deploy", "icon": "git-branch" }
+            },
+            {
+                "id": "server-deploy",
+                "area": "server",
+                "path": "deploy",
+                "permission": ["ext.git-deploy.read"],
+                "nav": { "label": "Deploy", "icon": "git-branch" }
+            }
+        ]
+    }
+}
