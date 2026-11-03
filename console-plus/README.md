@@ -53,7 +53,9 @@ before that start with the line come first.
   Minecraft version; game modes, difficulties, game rules, weather; maps (the current one marked);
   Rust items; FiveM resources. Coordinates offer `~ ~ ~`.
 - The game comes from the server's egg: its name, its tags and a few of its variables (a version,
-  a Source game, Rust's framework). A leading `/` is fine.
+  a Source game, Rust's framework). When these say nothing, as with a custom egg, the startup
+  command does: the program it runs tells Minecraft Java (and Forge, NeoForge, Paper, Sponge,
+  Velocity, BungeeCord), Bedrock, Rust, ARK, Terraria and FiveM apart. A leading `/` is fine.
 
 | Egg | Commands |
 | --- | --- |
@@ -109,7 +111,7 @@ server's game.
 ## Install
 
 ```bash
-php artisan p:extension:install pterodactyl-console-plus-1.1.0.zip --enable --replace
+php artisan p:extension:install pterodactyl-console-plus-1.2.0.zip --enable --replace
 ```
 
 Enabling runs `database/migrations` (table `console_plus_preferences`); no `php artisan migrate`
