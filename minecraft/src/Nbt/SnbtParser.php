@@ -32,7 +32,7 @@ final class SnbtParser
         $value = $this->value();
         $this->space();
         if ($this->offset !== $this->length) {
-            throw new InvalidArgumentException("Unexpected text after the SNBT value at {$this->offset}.");
+            throw $this->error('Unexpected text after the SNBT value');
         }
 
         return $value;
@@ -132,7 +132,7 @@ final class SnbtParser
             };
         }
 
-        throw new InvalidArgumentException('An SNBT string is not closed.');
+        throw $this->error('An SNBT string is not closed');
     }
 
     private function unicode(int $digits): string
@@ -146,7 +146,7 @@ final class SnbtParser
     private function bare(): string
     {
         if (! preg_match('/\G[A-Za-z0-9_\-.+]+/A', $this->text, $match, 0, $this->offset)) {
-            throw new InvalidArgumentException("Unexpected character in SNBT at {$this->offset}.");
+            throw $this->error('Unexpected character in SNBT');
         }
         $this->offset += strlen($match[0]);
 
@@ -195,7 +195,15 @@ final class SnbtParser
     private function expect(string $char): void
     {
         if (! $this->accept($char)) {
-            throw new InvalidArgumentException("Expected \"{$char}\" in SNBT at {$this->offset}.");
+            throw $this->error("Expected \"{$char}\" in SNBT");
         }
+    }
+
+    /** What stopped the parser, with the text around it, to check against what the server printed. */
+    private function error(string $what): InvalidArgumentException
+    {
+        $near = mb_strcut($this->text, max(0, $this->offset - 30), 60, 'UTF-8');
+
+        return new InvalidArgumentException("{$what} at {$this->offset}, near \"{$near}\".");
     }
 }

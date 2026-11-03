@@ -26,8 +26,6 @@ use OlivierDutoit\Minecraft\Players\Players;
 use OlivierDutoit\Minecraft\Players\Stats;
 use OlivierDutoit\Minecraft\Rcon\RconClient;
 use OlivierDutoit\Minecraft\Server\Properties;
-use OlivierDutoit\Minecraft\Server\ServerConsole;
-use OlivierDutoit\Minecraft\Server\StatusPing;
 
 $failures = 0;
 $count = 0;
@@ -147,8 +145,32 @@ check('modern commands', [
 ], [
     ['effect give Steve minecraft:instant_health 1 10 true'],
     ['item replace entity Steve inventory.0 with minecraft:air'],
-    ['item replace entity Steve enderchest.3 from entity Steve hotbar.0', 'item replace entity Steve hotbar.0 with minecraft:air'],
+    // The source is emptied only once the item is in the target.
+    ['item replace entity Steve enderchest.3 from entity Steve hotbar.0', 'execute if items entity Steve enderchest.3 * run item replace entity Steve hotbar.0 with minecraft:air'],
     ['title Steve title {"text":"Join discord.gg/x"}'],
+]);
+check('commands that check the slot themselves', [
+    Commands::player('Steve', 'give', ['item' => 'diamond', 'count' => 2, 'slot' => 'inventory.6'], 4325),
+    Commands::player('Steve', 'give', ['item' => 'diamond', 'count' => 2, 'slot' => 'armor.chest'], 2724),
+    Commands::player('Steve', 'move', ['from' => 'inventory.0', 'to' => 'inventory.5'], 2724),
+], [
+    ['execute unless items entity Steve hotbar.6 * run item replace entity Steve hotbar.6 with minecraft:diamond 2'],
+    ['execute unless data entity Steve Inventory[{Slot:102b}] run item replace entity Steve armor.chest with minecraft:diamond 2'],
+    ['item replace entity Steve hotbar.5 from entity Steve hotbar.0', 'execute if data entity Steve Inventory[{Slot:5b}] run item replace entity Steve hotbar.0 with minecraft:air'],
+]);
+// On a server that keeps the vanilla commands as `minecraft:<name>`, the command `execute` runs too.
+check('vanilla names', [
+    Commands::vanilla('give Steve minecraft:diamond 1', 'minecraft:'),
+    Commands::vanilla('execute in minecraft:the_nether run tp Steve 0 64 0', 'minecraft:'),
+    Commands::vanilla('say we run', 'minecraft:'),
+    Commands::vanilla('minecraft:give Steve minecraft:stone 1', 'minecraft:'),
+    Commands::vanilla('give Steve minecraft:diamond 1', ''),
+], [
+    'minecraft:give Steve minecraft:diamond 1',
+    'minecraft:execute in minecraft:the_nether run minecraft:tp Steve 0 64 0',
+    'minecraft:say we run',
+    'minecraft:give Steve minecraft:stone 1',
+    'give Steve minecraft:diamond 1',
 ]);
 check('1.16 commands', Commands::player('Steve', 'remove_slot', ['slot' => 'offhand'], 2586), ['replaceitem entity Steve weapon.offhand minecraft:air']);
 check('1.12 commands', [
@@ -178,30 +200,31 @@ check('modern stats', [$stats['playTime'], $stats['deaths'], $stats['blocksMined
 $stats = Stats::summarise(['stat.playOneMinute' => 100, 'stat.walkOneCm' => 500, 'stat.mineBlock.minecraft.stone' => 7, 'stat.killEntity.EnderDragon' => 1, 'stat.leaveGame' => 3]);
 check('legacy stats', [$stats['playTime'], $stats['timesJoined'], $stats['distances'], $stats['mined'], $stats['killed']], [100, 3, [['id' => 'walk', 'blocks' => 5]], [['id' => 'stone', 'count' => 7]], [['id' => 'ender_dragon', 'count' => 1]]]);
 
-// The answers of `list`.
-check('vanilla list', Players::parseList('[12:00:00 INFO]: There are 2 of a max of 20 players online: Steve, Alex'), ['online' => 2, 'max' => 20, 'players' => [['name' => 'Steve', 'uuid' => null], ['name' => 'Alex', 'uuid' => null]]]);
-check('bukkit list', Players::parseList("[12:00:00 INFO]: There are 1/10 players online:\n[12:00:00 INFO]: [Admin] Notch"), ['online' => 1, 'max' => 10, 'players' => [['name' => 'Notch', 'uuid' => null]]]);
-check('empty list', Players::parseList('There are 0 of a max of 20 players online: '), ['online' => 0, 'max' => 20, 'players' => []]);
+// The answers of `list uuids` over RCON: the names (and UUIDs) after the colon, as each version writes them.
+check('vanilla list', Players::parseList('There are 2 of a max of 20 players online: Steve (069a79f4-44e9-4726-a5be-fca90e38aaf5), Alex (11111111-1111-4111-8111-111111111111)'), ['online' => 2, 'max' => 20, 'players' => [['name' => 'Steve', 'uuid' => '069a79f4-44e9-4726-a5be-fca90e38aaf5'], ['name' => 'Alex', 'uuid' => '11111111-1111-4111-8111-111111111111']], 'complete' => true]);
+check('names alone', Players::parseList('There are 2 of a max of 20 players online: Steve, Alex'), ['online' => 2, 'max' => 20, 'players' => [['name' => 'Steve', 'uuid' => null], ['name' => 'Alex', 'uuid' => null]], 'complete' => true]);
+check('1.12 list', Players::parseList('There are 1/20 players online:Steve'), ['online' => 1, 'max' => 20, 'players' => [['name' => 'Steve', 'uuid' => null]], 'complete' => true]);
+check('bukkit list with a rank', Players::parseList("There are 1/10 players online:\n[Admin] Notch"), ['online' => 1, 'max' => 10, 'players' => [['name' => 'Notch', 'uuid' => null]], 'complete' => true]);
+check('empty list', Players::parseList('There are 0 of a max of 20 players online: '), ['online' => 0, 'max' => 20, 'players' => [], 'complete' => true]);
+// Offline mode lets in names that are not Mojang's ("Bob!", "Ann.", "Bo,b"): each is found by its UUID.
+check('any name without a space', array_column(Players::parseList('There are 3 of a max of 20 players online: Bob! (069a79f4-44e9-4726-a5be-fca90e38aaf5), Ann. (11111111-1111-4111-8111-111111111111), Bo,b (22222222-2222-4222-8222-222222222222)')['players'], 'name', 'uuid'), [
+    '069a79f4-44e9-4726-a5be-fca90e38aaf5' => 'Bob!', '11111111-1111-4111-8111-111111111111' => 'Ann.', '22222222-2222-4222-8222-222222222222' => 'Bo,b',
+]);
+// Fewer players read than the count: the list is not the whole truth.
+check('a list read in part', Players::parseList('There are 2 of a max of 20 players online: Steve (069a79f4-44e9-4726-a5be-fca90e38aaf5), ???')['complete'], false);
+// An answer the server cut short: no UUID fragment taken for a name, no cut name kept.
+check('a list cut in a UUID', Players::parseList('There are 1 of a max of 20 players online: Olivier_D (069a79f4-44e9-4726-a5be-fca9...'), ['online' => 1, 'max' => 20, 'players' => [], 'complete' => false]);
+check('a list cut in a name', Players::parseList('There are 2/20 players online:Steve, Ale...'), ['online' => 2, 'max' => 20, 'players' => [['name' => 'Steve', 'uuid' => null]], 'complete' => false]);
 
-// The console: only the server's own answers count, and only those printed after the command.
-check('a chat line is no answer', [
-    ServerConsole::answers('[12:00:00] [Server thread/INFO]: There are 0 of a max of 20 players online: ', '/^There are \d+/i'),
-    ServerConsole::answers('[12:00:00] [Server thread/INFO]: <Steve> There are 0 of a max of 20 players online: Admin', '/^There are \d+/i'),
-    ServerConsole::answers('[12:00:00 INFO]: Saved the game', '/^(Saved the (game|world))/i'),
-    ServerConsole::answers('Saved the world', '/^(Saved the (game|world))/i'),
-], [true, false, true, true]);
-check('a redrawn prompt before the answer', [
-    ServerConsole::text(">\r[12:00:01 INFO]: Steve has the following entity data: 20.0f"),
-    ServerConsole::text('> [12:00:01] [Server thread/INFO]: Found no elements matching Air'),
-    ServerConsole::answers("\r> [12:00:01 INFO]: Steve has the following entity data: 20.0f", '/^\S+ has the following entity data: /'),
-], ['Steve has the following entity data: 20.0f', 'Found no elements matching Air', true]);
-check('lines after the command',ServerConsole::after(['a', 'b', 'c'], ['b', 'c', 'd', 'e']), ['d', 'e']);
-check('lines after scrolled out', ServerConsole::after(['x', 'y', 'z'], ['d', 'e']), ['d', 'e']);
-check('bukkit names line, never chat', [
-    Players::listAnswer(['[INFO]: There are 1/10 players online:', '[INFO]: Notch']),
-    Players::listAnswer(['[INFO]: There are 0/10 players online:', '[INFO]: <Alex> hi']),
-    Players::listAnswer(['[INFO]: There are 1 of a max of 20 players online: Steve', '[INFO]: Steve joined the game']),
-], ["[INFO]: There are 1/10 players online:\n[INFO]: Notch", '[INFO]: There are 0/10 players online:', '[INFO]: There are 1 of a max of 20 players online: Steve']);
+// One reading of a `data get` answer: empty only for "Found no elements matching" the very path asked.
+check('answers of data get', [
+    OlivierDutoit\Minecraft\Players\LivePlayer::answer('Found no elements matching Inventory[{Slot:5b}]', 'Inventory[{Slot:5b}]')[0],
+    OlivierDutoit\Minecraft\Players\LivePlayer::answer('Found no elements matching active_effects', 'Inventory[{Slot:5b}]')[0],
+    OlivierDutoit\Minecraft\Players\LivePlayer::answer('Steve has the following entity data: {Slot: 5b, id: "minecraft:stone", count: 1}', 'Inventory[{Slot:5b}]')[0],
+    OlivierDutoit\Minecraft\Players\LivePlayer::answer('Steve has the following entity data: {Slot: 5b, id: "minecraft:st...', 'Inventory[{Slot:5b}]'),
+    OlivierDutoit\Minecraft\Players\LivePlayer::answer('No entity was found', 'Health'),
+], ['none', 'other', 'value', ['unreadable', 'The server cut its answer short.'], ['other', 'The server answered: No entity was found']]);
+throws('another answer is no list', fn () => Players::parseList('Unknown command. Type "/help" for help.'), 'The server answered');
 throws('a name ends at its end', fn () => Players::assertName("Steve\n"), 'not a Minecraft player name');
 
 // Clearing one kind of item, offline.
@@ -216,9 +239,6 @@ $file = PlayerFile::load(Nbt::write(Tag::compound([
 $file->clearInventory('minecraft:dirt');
 $profile = PlayerProfile::from($file->root->plain());
 check('clear one item', [array_column($profile['inventory'], 'id'), $profile['armor']['head']], [['minecraft:stone'], null]);
-
-// The status ping's JSON, with the placeholders of a server that hides its players.
-check('ping', StatusPing::parse('{"version":{"name":"Paper 1.21.4"},"players":{"online":3,"max":20,"sample":[{"name":"Steve","id":"069A79F4-44E9-4726-A5BE-FCA90E38AAF5"},{"name":"Anonymous Player","id":"00000000-0000-0000-0000-000000000000"}]}}'), ['online' => 3, 'max' => 20, 'sample' => [['name' => 'Steve', 'uuid' => '069a79f4-44e9-4726-a5be-fca90e38aaf5']], 'version' => 'Paper 1.21.4']);
 
 // The lists' files and UUIDs.
 check('offline UUID', Lists::offlineUuid('Steve'), '5627dd98-e6be-3c21-b8a8-e92344183641');
@@ -254,9 +274,12 @@ final class FakeRconStream
             $this->in = substr($this->in, 4 + $length);
             match ($type) {
                 3 => $this->reply($body === self::$password ? $id : -1, 2, ''),
-                2 => $body === 'long'
-                    ? [$this->reply($id, 0, str_repeat('a', 4096)), $this->reply($id, 0, "b\u{00A7}cc")]
-                    : $this->reply($id, 0, "\u{00A7}a{$body} done"),
+                2 => match ($body) {
+                    'long' => [$this->reply($id, 0, str_repeat('a', 4096)), $this->reply($id, 0, "b\u{00A7}cc")],
+                    // An answer without end, 4096 bytes at a time.
+                    'flood' => array_map(fn (): mixed => $this->reply($id, 0, str_repeat('a', 4096)), range(1, 600)),
+                    default => $this->reply($id, 0, "\u{00A7}a{$body} done"),
+                },
                 default => $this->reply($id, 0, 'Unknown request 0'),
             };
         }
@@ -286,11 +309,11 @@ final class FakeRconStream
     }
 }
 stream_wrapper_register('fakercon', FakeRconStream::class);
-$rconClient = function (string $password): RconClient {
+$rconClient = function (string $password, int $timeout = 2): RconClient {
     $client = (new ReflectionClass(RconClient::class))->newInstanceWithoutConstructor();
-    (function () use ($password): void {
+    (function () use ($password, $timeout): void {
         $this->socket = fopen('fakercon://server', 'r+');
-        $this->timeout = 2;
+        $this->timeout = $timeout;
         $this->authenticate($password);
     })->call($client);
 
@@ -299,6 +322,9 @@ $rconClient = function (string $password): RconClient {
 $client = $rconClient('secret');
 check('rcon commands', [$client->command('list'), $client->command('long'), $client->command('time query day')], ['list done', str_repeat('a', 4096).'bc', 'time query day done']);
 throws('rcon wrong password', fn () => $rconClient('wrong'), 'refused the RCON password');
+// A server cannot hold the panel: an answer without end stops at 2 MB, and one past its time stops.
+throws('rcon answer without end', fn () => $rconClient('secret')->command('flood'), 'longer than 2 MB');
+throws('rcon answer past its time', fn () => $rconClient('secret', -10)->command('list'), 'did not answer within');
 
 echo $failures === 0 ? "ok {$count} checks\n" : "{$failures} of {$count} checks failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -16,7 +16,10 @@ use OlivierDutoit\Minecraft\Players\Commands;
 use OlivierDutoit\Minecraft\Players\Lists;
 use OlivierDutoit\Minecraft\Players\Players;
 use OlivierDutoit\Minecraft\Players\World;
+use OlivierDutoit\Minecraft\Players\WorldLive;
+use OlivierDutoit\Minecraft\Rcon\RconException;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
+use OlivierDutoit\Minecraft\Server\ServerConsole;
 use OlivierDutoit\Minecraft\Server\ServerRcon;
 use Pterodactyl\Contracts\Files\WritesFileContents;
 use Pterodactyl\Exceptions\DisplayException;
@@ -29,6 +32,9 @@ use RuntimeException;
 /**
  * A Minecraft server's players and world. Seeing them takes `ext.minecraft.read`; acting on them, on
  * the lists and on the world `ext.minecraft.manage`. The server icon takes `file.update`.
+ *
+ * Every answer that depends on the running server says how RCON answered (`rcon`), since only RCON
+ * can say what the server holds now.
  */
 final class MinecraftController
 {
@@ -37,7 +43,9 @@ final class MinecraftController
         private readonly Actions $actions,
         private readonly Lists $lists,
         private readonly World $world,
+        private readonly WorldLive $live,
         private readonly ServerRcon $rcon,
+        private readonly ServerConsole $console,
         private readonly MinecraftServer $files,
     ) {}
 
@@ -46,18 +54,21 @@ final class MinecraftController
         $server = $this->authorize($request, ['ext.minecraft.read']);
 
         return $this->answer(function () use ($server): array {
-            $status = $this->players->status($server);
+            $presence = $this->players->presence($server);
             $properties = $this->files->properties($server);
+            $max = $properties->get('max-players');
 
             return [
-                'running' => $status['running'],
-                'online' => $status['online'],
-                'max' => $status['max'],
+                'state' => $presence['state'],
+                'running' => $presence['state'] === 'running',
+                // Null while the server runs without RCON: nothing else says who is online.
+                'online' => $presence['online'],
+                'max' => $presence['max'] ?? (is_numeric($max) ? (int) $max : null),
                 'joined' => count(array_filter($this->players->all($server), fn (array $player): bool => $player['lastSeen'] !== null)),
-                'version' => $status['version'],
+                'version' => $this->files->version($server)['name'],
                 'motd' => $properties->get('motd', 'A Minecraft Server'),
                 'world' => $this->files->world($server),
-                'rcon' => $this->rcon->status($server),
+                'rcon' => $this->players->rcon($server),
             ];
         });
     }
@@ -79,8 +90,10 @@ final class MinecraftController
         return $this->answer(function () use ($server, $port, $newPassword): array {
             $this->rcon->enable($server, $port, $newPassword);
             Activity::event('server:minecraft.rcon.enable')->property(['port' => $port, 'new_password' => $newPassword])->log();
+            // Asked again at the next request; not now: nothing listens before the server restarts.
+            $this->players->fresh($server);
 
-            return $this->rcon->status($server);
+            return [...$this->rcon->status($server), 'state' => 'idle', 'error' => null];
         });
     }
 
@@ -162,11 +175,28 @@ final class MinecraftController
         });
     }
 
+    /**
+     * The active world: from its save while the server is stopped; while it runs, the time, weather
+     * and rules as RCON reads them (`live`), and none of them when RCON cannot be asked.
+     */
     public function world(Request $request): JsonResponse
     {
         $server = $this->authorize($request, ['ext.minecraft.read']);
 
-        return $this->answer(fn (): array => $this->world->info($server));
+        return $this->answer(function () use ($server): array {
+            $info = $this->world->info($server);
+            $state = $this->console->state($server);
+            $rcon = [...$this->rcon->status($server), 'state' => 'idle', 'error' => null];
+            if ($state !== 'running' || ! $info['found']) {
+                return [...$info, 'state' => $state, 'live' => false, 'rcon' => $rcon];
+            }
+
+            try {
+                return [...$this->live->read($server, $info), 'state' => $state, 'live' => true, 'rcon' => [...$rcon, 'state' => 'ok']];
+            } catch (RconException $exception) {
+                return [...$info, 'raining' => null, 'thundering' => null, 'dayTime' => null, 'rules' => [], 'state' => $state, 'live' => false, 'rcon' => [...$rcon, ...Players::rconError($exception)]];
+            }
+        });
     }
 
     public function worldAction(Request $request): JsonResponse

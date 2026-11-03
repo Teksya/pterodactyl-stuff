@@ -11,8 +11,8 @@ export type Filter = 'all' | 'online' | 'offline' | 'op' | 'banned';
 // The Pelican plugin's tabs, each with its count.
 const FILTERS: { value: Filter; label: string; tone: 'neutral' | 'success' | 'warning' | 'danger'; test: (player: Player) => boolean }[] = [
     { value: 'all', label: 'All', tone: 'neutral', test: () => true },
-    { value: 'online', label: 'Online', tone: 'success', test: (player) => player.online },
-    { value: 'offline', label: 'Offline', tone: 'neutral', test: (player) => !player.online },
+    { value: 'online', label: 'Online', tone: 'success', test: (player) => player.online === true },
+    { value: 'offline', label: 'Offline', tone: 'neutral', test: (player) => player.online === false },
     { value: 'op', label: 'OP', tone: 'warning', test: (player) => player.op !== null },
     { value: 'banned', label: 'Banned', tone: 'danger', test: (player) => player.banned !== null },
 ];
@@ -22,11 +22,17 @@ interface Props {
     onView: (uuid: string) => void;
 }
 
-/** Everyone the server knows, as the plugin's player list: tabs by state, a search, a table with actions. */
+/**
+ * Everyone the server knows, as the plugin's player list: tabs by state, a search, a table with
+ * actions. While the server runs without RCON, who is online is unknown: no Online or Offline tab.
+ */
 export default function PlayerList({ players, onView }: Props) {
     const canManage = useServerPermission('ext.minecraft.manage');
     const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<Filter>('all');
+    const [chosen, setFilter] = useState<Filter>('all');
+    const known = players.every((player) => player.online !== null);
+    const filters = FILTERS.filter((entry) => known || (entry.value !== 'online' && entry.value !== 'offline'));
+    const filter = filters.some((entry) => entry.value === chosen) ? chosen : 'all';
     const needle = search.trim().toLowerCase();
     const test = FILTERS.find((entry) => entry.value === filter)!.test;
     const shown = players.filter((player) => test(player) && (!needle || (player.name ?? '').toLowerCase().includes(needle) || player.uuid.startsWith(needle)));
@@ -40,19 +46,24 @@ export default function PlayerList({ players, onView }: Props) {
             cell: (player) => (
                 <button type='button' onClick={() => onView(player.uuid)} className='mc:flex mc:cursor-pointer mc:flex-col mc:items-start mc:border-0 mc:bg-transparent mc:p-0 mc:text-left'>
                     <span className='mc:text-sm mc:font-medium mc:text-foreground'>{player.name ?? player.uuid.slice(0, 8)}</span>
-                    <span className='mc:text-xs mc:text-muted-foreground'>{player.online ? 'Online now' : player.lastSeen ? `Seen ${fromNow(player.lastSeen)}` : 'Never joined'}</span>
+                    <span className='mc:text-xs mc:text-muted-foreground'>{player.online === true ? 'Online now' : player.lastSeen ? `Seen ${fromNow(player.lastSeen)}` : 'Never joined'}</span>
                 </button>
             ),
         },
         {
             id: 'status',
             label: 'Status',
-            sortValue: (player) => (player.banned !== null ? 0 : player.online ? 1 : 2),
-            cell: (player) => (
-                <Badge size='sm' variant='soft' tone={player.banned !== null ? 'danger' : player.online ? 'success' : 'neutral'}>
-                    {player.banned !== null ? 'Banned' : player.online ? 'Online' : 'Offline'}
-                </Badge>
-            ),
+            sortValue: (player) => (player.banned !== null ? 0 : player.online === true ? 1 : player.online === null ? 2 : 3),
+            cell: (player) =>
+                player.banned === null && player.online === null ? (
+                    <Tooltip content='Who is online is asked over RCON.'>
+                        <span className='mc:text-sm mc:text-muted-foreground'>—</span>
+                    </Tooltip>
+                ) : (
+                    <Badge size='sm' variant='soft' tone={player.banned !== null ? 'danger' : player.online ? 'success' : 'neutral'}>
+                        {player.banned !== null ? 'Banned' : player.online ? 'Online' : 'Offline'}
+                    </Badge>
+                ),
         },
         {
             id: 'op',
@@ -81,7 +92,7 @@ export default function PlayerList({ players, onView }: Props) {
         <div className='mc:flex mc:min-w-0 mc:flex-col mc:gap-3'>
             <div className='mc:flex mc:flex-wrap mc:items-center mc:gap-3'>
                 <div className='mc:flex mc:flex-wrap mc:gap-1 mc:rounded-lg mc:border mc:border-border mc:bg-card mc:p-1' role='tablist' aria-label='Show'>
-                    {FILTERS.map((entry) => (
+                    {filters.map((entry) => (
                         <button
                             key={entry.value}
                             type='button'
@@ -127,9 +138,9 @@ function RowButtons({ player, canManage, onView }: { player: Player; canManage: 
                         {isOp ? <ShieldAlert aria-hidden className='mc:mr-1 mc:size-4' /> : <ShieldCheck aria-hidden className='mc:mr-1 mc:size-4' />}
                         {isOp ? 'DEOP' : 'OP'}
                     </Button>
-                    <Tooltip content={player.online ? 'Kick' : `${name} is offline.`}>
+                    <Tooltip content={player.online === false ? `${name} is offline.` : 'Kick'}>
                         <span className='mc:inline-flex'>
-                            <Button size='xsmall' color='red' aria-label={`Kick ${name}`} disabled={!player.online} onClick={() => setDialog('kick')}>
+                            <Button size='xsmall' color='red' aria-label={`Kick ${name}`} disabled={player.online === false} onClick={() => setDialog('kick')}>
                                 <LogOut aria-hidden className='mc:mr-1 mc:size-4' />
                                 Kick
                             </Button>

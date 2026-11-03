@@ -1,9 +1,14 @@
+/** Wings' power state, or null when Wings did not answer. */
+export type PowerState = 'offline' | 'starting' | 'running' | 'stopping' | null;
+
 export interface Overview {
+    state: PowerState;
     running: boolean;
-    online: number;
+    /** Null while the server runs without RCON: only RCON says who is online. */
+    online: number | null;
     max: number | null;
     joined: number;
-    /** The version the server reports, such as "Paper 1.21.4". */
+    /** The world's version, from its level.dat. */
     version: string | null;
     /** The message of the day, with its § codes. */
     motd: string | null;
@@ -12,7 +17,11 @@ export interface Overview {
     rcon: RconStatus;
 }
 
-/** RCON reads online players at once and silently; without it the panel reads the console back. */
+/**
+ * How the panel asks the running server what it holds (who is online, a player, the time, the
+ * rules, a save before a snapshot): RCON, and nothing else. Actions are commands typed in the
+ * console, which need no answer.
+ */
 export interface RconStatus {
     enabled: boolean;
     port: number | null;
@@ -22,12 +31,17 @@ export interface RconStatus {
     password: boolean;
     /** Allocation ports the game and query do not use. */
     ports: number[];
+    /** ok: the running server answered; off: not turned on; error: on, but asking it failed; idle: the server is not running. */
+    state: 'ok' | 'off' | 'error' | 'idle';
+    /** Why asking it failed: RCON's words, or the server's answer when it is not the game's. */
+    error: string | null;
 }
 
 export interface Player {
     uuid: string;
     name: string | null;
-    online: boolean;
+    /** Null when it is not known: the server runs without RCON, or is starting or stopping. */
+    online: boolean | null;
     /** The operator level, or null. */
     op: number | null;
     whitelisted: boolean;
@@ -92,15 +106,20 @@ export interface Stats {
 export interface Profile extends Player {
     /** False for a player the server never saved: one only on a list, or who just joined. */
     saved: boolean;
-    /** live: read over RCON while the player is online; file: as the server last saved them. */
-    source?: 'live' | 'file';
     /**
-     * For a player online, how the live reading went: over `rcon`, `off` (RCON is off: the file is
-     * shown), `error` (RCON did not answer), `unsupported` (before 1.13). Null for one offline.
+     * live: asked over RCON now; file: their save, the truth while the server is stopped or RCON says
+     * they are offline, their last save otherwise (`online` null: RCON cannot say who plays, or the
+     * server is starting or stopping; or, before 1.13, the server cannot be asked); none: RCON lists
+     * them online but did not read them (see `liveError`).
      */
-    liveVia?: 'rcon' | 'console' | 'off' | 'error' | 'unsupported' | null;
-    /** Why the live reading failed, when it did. */
-    liveError?: string | null;
+    source: 'live' | 'file' | 'none';
+    /** The server's power state when the panel looked. */
+    state: PowerState;
+    rcon: Pick<RconStatus, 'state' | 'error'>;
+    /** Why RCON did not read a player it says is online. */
+    liveError: string | null;
+    /** Parts of a live read RCON did not give in a form the panel reads (too long even alone), which are missing. */
+    unread?: { field: string; reason: string }[];
     /** Why the player's file could not be read, when it could not. */
     readError?: string | null;
     health?: number | null;
@@ -132,10 +151,15 @@ export interface WorldInfo {
     seed?: string | null;
     spawn?: { x: number; y: number; z: number } | null;
     hardcore?: boolean;
-    raining?: boolean;
-    thundering?: boolean;
+    /** Null while the server runs and cannot be asked (before 1.20.5 for the weather). */
+    raining?: boolean | null;
+    thundering?: boolean | null;
     dayTime?: number | null;
     rules: Record<string, string>;
+    state: PowerState;
+    /** The time, weather and rules come from the running server, over RCON. */
+    live: boolean;
+    rcon: RconStatus;
 }
 
 export interface IpBan {
@@ -183,6 +207,10 @@ export interface WorldsData {
     active: string;
     worlds: WorldFolder[];
     snapshots: Snapshot[];
-    schedule: { interval_hours: number; keep: number; last_run_at: string | null };
+    /** last_error: why the last automatic snapshot failed, until one is taken. */
+    schedule: { interval_hours: number; keep: number; last_run_at: string | null; last_error: string | null; last_error_at: string | null };
     limits: { manual: number };
+    state: PowerState;
+    /** A running server is snapshot once RCON had it save its world. */
+    rcon: RconStatus;
 }

@@ -4,24 +4,40 @@ declare(strict_types=1);
 
 namespace OlivierDutoit\Minecraft\Server;
 
+use Closure;
 use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 use OlivierDutoit\Minecraft\Rcon\RconClient;
+use OlivierDutoit\Minecraft\Rcon\RconConnection;
 use OlivierDutoit\Minecraft\Rcon\RconException;
 use Pterodactyl\Models\Allocation;
 use Pterodactyl\Models\Server;
 
 /**
- * A server's RCON, when server.properties turns it on: one connection that answers each command at
- * once, faster than reading the console back, and silent in it.
+ * A running server's RCON: how the panel asks it questions. Everything the panel reads from a running
+ * server goes through here (who is online, a player's state, the time and the game rules, the save
+ * before a snapshot); actions are commands typed in its console instead, which need no answer.
  *
- * The panel tries the RCON port's allocation address, the node's FQDN, then 127.0.0.1 and localhost
- * (a panel on the node's machine), remembers the one that answered, and gives RCON up for a minute
- * when none does, so the console takes over without waiting each time.
+ * The panel tries the RCON port's allocation address and alias, the node's FQDN, then 127.0.0.1 (a
+ * panel on the node's machine), and remembers the one that answered. When none does, it waits a
+ * minute before trying again, so pages that refresh do not wait on each address every time. A
+ * request asks all its questions on one connection, closed when it ends: each connection is a line
+ * in the server's console.
  */
 final class ServerRcon
 {
     private const int TIMEOUT = 2;
+    private const int REST = 60;
+
+    /** @var array<string, RconConnection> the connection to each server, open for the rest of the request */
+    private array $connections = [];
+
+    /**
+     * How the panel opens a connection; the tests put a stand-in here.
+     *
+     * @var (Closure(string, int, string, int): RconConnection)|null
+     */
+    public static ?Closure $connector = null;
 
     public function __construct(private readonly MinecraftServer $files) {}
 
@@ -66,80 +82,92 @@ final class ServerRcon
         $this->files->write($server, MinecraftServer::PROPERTIES, $properties->contents());
         Cache::forget($this->key($server, 'host'));
         Cache::forget($this->key($server, 'down'));
+        if (isset($this->connections[$server->uuid])) {
+            $this->connections[$server->uuid]->close();
+            unset($this->connections[$server->uuid]);
+        }
     }
 
     /**
-     * Runs `$commands` on one connection and returns each answer, in order, waiting up to `$wait`
-     * seconds for each; null when RCON is off.
+     * Asks the running server: runs `$commands` and returns each answer, in order, waiting up to
+     * `$wait` seconds for each, on the request's connection to it.
      *
      * @param  list<string>  $commands
-     * @return list<string>|null
+     * @return list<string>
      *
-     * @throws RconException when RCON is on but no address answers, now or within the last minute;
-     *                       with the code SENT when it failed once the commands were sent.
+     * @throws RconException when RCON is off, cannot be reached, refuses the password or does not answer.
      */
-    public function run(Server $server, array $commands, int $wait = self::TIMEOUT): ?array
+    public function ask(Server $server, array $commands, int $wait = self::TIMEOUT): array
+    {
+        $connection = $this->connections[$server->uuid] ??= $this->open($server);
+        try {
+            $connection->wait($wait);
+
+            return array_map(fn (string $command): string => $connection->command($command), $commands);
+        } catch (RconException $exception) {
+            // The rest of an answer may still be on its way: the next question opens another connection.
+            $connection->close();
+            unset($this->connections[$server->uuid]);
+            throw $exception;
+        }
+    }
+
+    public function __destruct()
+    {
+        foreach ($this->connections as $connection) {
+            $connection->close();
+        }
+    }
+
+    /** @throws RconException */
+    private function open(Server $server): RconConnection
     {
         $properties = $this->files->properties($server);
         $port = $this->port($properties);
         if (! $this->enabled($properties) || $port === null) {
-            return null;
+            throw RconException::off();
         }
-        if (Cache::has($this->key($server, 'down'))) {
-            throw RconException::resting();
+        $down = Cache::get($this->key($server, 'down'));
+        if ($down !== null) {
+            throw RconException::resting(self::REST, is_string($down) ? $down : null);
         }
         $password = (string) $properties->get('rcon.password');
 
-        $last = null;
+        $started = microtime(true);
+        $failures = [];
         foreach ($this->hosts($server, $port) as $host) {
             try {
-                $client = RconClient::connect($host, $port, $password, self::TIMEOUT);
+                $connection = $this->connect($host, $port, $password);
             } catch (RconException $exception) {
-                $last = $exception;
-                // A wrong password is the same at every address.
+                // A wrong password is the same at every address, and at every request until the server
+                // restarts with the one in server.properties: each try is a line in its console.
                 if ($exception->getCode() === RconException::DENIED) {
-                    break;
+                    Cache::put($this->key($server, 'down'), $exception->getMessage(), self::REST);
+                    throw $exception;
                 }
+                $failures[] = $exception;
                 continue;
             }
 
             Cache::put($this->key($server, 'host'), $host, 600);
-            try {
-                $client->wait($wait);
 
-                return array_map(fn (string $command): string => $client->command($command), $commands);
-            } catch (RconException $exception) {
-                throw RconException::sent($exception);
-            } finally {
-                $client->close();
-            }
+            return $connection;
         }
 
-        Cache::put($this->key($server, 'down'), true, 60);
-        throw $last ?? RconException::unreachable($port, 'no address to try');
+        $failure = $failures[0] ?? RconException::unreachable($port, 'no address to try');
+        // Addresses that kept the panel waiting are not tried again for a while. A refusal costs
+        // nothing (nothing listens yet, as after RCON was just turned on): the next request asks again.
+        if (microtime(true) - $started >= 1) {
+            Cache::put($this->key($server, 'down'), $failure->getMessage(), self::REST);
+        }
+        throw $failure;
     }
 
-    /**
-     * Runs `$commands` over RCON and returns the answers; null when RCON is off or cannot be
-     * reached, for the console to take over. Commands RCON took and then failed on may have run,
-     * so that still throws rather than let them run twice.
-     *
-     * @param  list<string>  $commands
-     * @return list<string>|null
-     *
-     * @throws RconException with the code SENT.
-     */
-    public function attempt(Server $server, array $commands, int $wait = self::TIMEOUT): ?array
+    private function connect(string $host, int $port, string $password): RconConnection
     {
-        try {
-            return $this->run($server, $commands, $wait);
-        } catch (RconException $exception) {
-            if ($exception->getCode() === RconException::SENT) {
-                throw $exception;
-            }
-
-            return null;
-        }
+        return self::$connector !== null
+            ? (self::$connector)($host, $port, $password, self::TIMEOUT)
+            : RconClient::connect($host, $port, $password, self::TIMEOUT);
     }
 
     private function enabled(Properties $properties): bool
@@ -156,13 +184,13 @@ final class ServerRcon
     private function hosts(Server $server, int $port): array
     {
         $allocation = $this->allocation($server, $port) ?? $server->allocation;
-        $ip = (string) $allocation?->ip;
+        $ip = (string) ($allocation->ip ?? '');
         $hosts = [
             Cache::get($this->key($server, 'host')),
             in_array($ip, ['', '0.0.0.0', '::', '[::]'], true) ? null : $ip,
+            $allocation->ip_alias ?? null,
             $server->node->fqdn,
             '127.0.0.1',
-            'localhost',
         ];
 
         return array_values(array_unique(array_filter($hosts, fn (mixed $host): bool => is_string($host) && $host !== '')));

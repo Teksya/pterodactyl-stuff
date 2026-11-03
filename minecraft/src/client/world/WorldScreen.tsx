@@ -27,8 +27,10 @@ import {
 } from '@pterodactyl/sdk';
 import { keys, world as fetchWorld, type WorldAction } from '../api';
 import { useWorldAction } from '../players/usePlayerAction';
+import RconDialog from '../RconDialog';
+import RconRequired from '../RconRequired';
 import type { WorldInfo } from '../types';
-import { useServerState } from '../useServerState';
+import { useRefetchOnPowerChange } from '../useServerState';
 import SnapshotsTab from './SnapshotsTab';
 
 /** Server → Worlds: the active world (its weather, time and rules), and every world with its snapshots. */
@@ -62,12 +64,26 @@ export default function WorldScreen({ data }: ScreenComponentProps) {
     );
 }
 
+/**
+ * The active world. While the server runs, its time, weather and rules are asked over RCON and read
+ * again every few seconds; without RCON they are not shown, rather than as they were last saved.
+ */
 function ActiveWorld() {
     const uuid = useCurrentServerUuid() ?? '';
-    const query = useQuery({ queryKey: keys.world(uuid), queryFn: () => fetchWorld(uuid), enabled: uuid !== '' });
-    const state = useServerState();
+    const query = useQuery({
+        queryKey: keys.world(uuid),
+        queryFn: () => fetchWorld(uuid),
+        enabled: uuid !== '',
+        refetchInterval: (current) => (current.state.data?.state === 'offline' ? false : WORLD_REFRESH),
+    });
+    // Stopped, the page stops looking; it looks again as soon as the console says the server starts.
+    useRefetchOnPowerChange(query.refetch);
     const canManage = useServerPermission('ext.minecraft.manage');
-    const running = state === 'running';
+    const canEditFiles = useServerPermission('file.update');
+    const [rconOpen, setRconOpen] = useState(false);
+    const running = query.data?.state === 'running';
+    const live = query.data?.live ?? false;
+    const onRcon = canManage && canEditFiles ? () => setRconOpen(true) : undefined;
 
     return (
         <>
@@ -84,16 +100,25 @@ function ActiveWorld() {
                 </Empty>
             ) : (
                 <div className='mc:flex mc:flex-col mc:gap-6'>
+                    {running && !live && (
+                        <RconRequired rcon={query.data.rcon} onSettings={onRcon}>
+                            While the server runs, its time, weather and game rules are asked over RCON.
+                        </RconRequired>
+                    )}
                     <div className='mc:grid mc:gap-6 mc:xl:grid-cols-2'>
                         <InfoCard info={query.data} />
                         {canManage && <WorldControls running={running} />}
                     </div>
-                    <Gamerules rules={query.data.rules} editable={canManage && running} running={running} />
+                    {(live || !running) && <Gamerules rules={query.data.rules} editable={canManage && running} running={running} />}
+                    <RconDialog key={`rcon-${rconOpen}`} open={rconOpen} status={query.data.rcon} onClose={() => setRconOpen(false)} />
                 </div>
             )}
         </>
     );
 }
+
+/** How often the world is looked at again while the server runs. */
+const WORLD_REFRESH = 10_000;
 
 function InfoCard({ info }: { info: WorldInfo }) {
     const time = info.dayTime != null ? info.dayTime % 24000 : null;
@@ -103,7 +128,7 @@ function InfoCard({ info }: { info: WorldInfo }) {
         ['Version', info.version ?? '—'],
         ['Seed', info.seed ? <CopyOnClick text={info.seed}><code className='mc:cursor-pointer'>{info.seed}</code></CopyOnClick> : '—'],
         ['Spawn', info.spawn ? `${info.spawn.x}, ${info.spawn.y}, ${info.spawn.z}` : '—'],
-        ['Weather', info.thundering ? 'Thunder' : info.raining ? 'Rain' : 'Clear'],
+        ['Weather', info.thundering == null || info.raining == null ? '—' : info.thundering ? 'Thunder' : info.raining ? 'Rain' : 'Clear'],
         ['Time of day', clock],
         ['Hardcore', info.hardcore ? 'Yes' : 'No'],
     ];
@@ -118,7 +143,13 @@ function InfoCard({ info }: { info: WorldInfo }) {
                     </div>
                 ))}
             </dl>
-            <p className='mc:mt-3 mc:mb-0 mc:text-xs mc:text-muted-foreground'>As the world was last saved.</p>
+            <p className='mc:mt-3 mc:mb-0 mc:text-xs mc:text-muted-foreground'>
+                {info.live
+                    ? `Asked over RCON${info.raining == null ? '; the server reports the weather from Minecraft 1.20.5' : ''}.`
+                    : info.state === 'offline'
+                      ? 'As the world is saved: the server is stopped.'
+                      : 'As the world was last saved, but for the time and weather, which only RCON tells.'}
+            </p>
         </TitledGreyBox>
     );
 }
@@ -179,13 +210,11 @@ function Gamerules({ rules, editable, running }: { rules: Record<string, string>
     const action = useWorldAction();
     const [filter, setFilter] = useState('');
     const [view, setView] = useState<'all' | 'on' | 'off'>('all');
-    // Values set here, shown until the world is saved again.
-    const [set, setSet] = useState<Record<string, string>>({});
-    const entries = useMemo(() => Object.entries({ ...rules, ...set }), [rules, set]);
+    const entries = useMemo(() => Object.entries(rules), [rules]);
 
     const needle = filter.trim().toLowerCase();
     const shown = entries.filter(([name, value]) => (!needle || name.toLowerCase().includes(needle)) && (view === 'all' || (view === 'on' ? isOn(value) : isOff(value))));
-    const change = (rule: string, value: string) => action.mutate({ action: 'gamerule', rule, value }, { onSuccess: () => setSet((current) => ({ ...current, [rule]: value })) });
+    const change = (rule: string, value: string) => action.mutate({ action: 'gamerule', rule, value });
 
     return (
         <TitledGreyBox
@@ -200,7 +229,7 @@ function Gamerules({ rules, editable, running }: { rules: Record<string, string>
             }
         >
             {entries.length === 0 ? (
-                <p className='mc:m-0 mc:text-sm mc:text-muted-foreground'>The world's level.dat lists no game rule.</p>
+                <p className='mc:m-0 mc:text-sm mc:text-muted-foreground'>{running ? 'The server answered for no game rule.' : "The world's save lists no game rule."}</p>
             ) : (
                 <>
                     {!running && <Alert type='info' className='mc:mb-4'>The rules change through the console: start the server to change them.</Alert>}

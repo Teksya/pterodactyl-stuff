@@ -2,8 +2,9 @@
 
 /*
  * Tests of snapshots and restores against a server played by stand-ins: its files in memory, archives
- * that hold copies of them, a console and power signals. They check that a restore never loses a
- * world: the current one is set aside, and put back when the extraction fails.
+ * that hold copies of them, a console, RCON and power signals. They check that a running server is
+ * saved over RCON before its snapshot, and that a restore never loses a world: the current one is
+ * set aside, and put back when the extraction fails.
  *
  *     php tests/snapshots.php
  */
@@ -28,9 +29,10 @@ use Pterodactyl\Models\Server;
 Snapshots::$stateCacheSeconds = 0;
 
 $fake = new FakeServer();
+rconOf($fake);
 $fake->state = 'running';
 $fake->files = [
-    'server.properties' => "level-name=world\n",
+    'server.properties' => "level-name=world\nenable-rcon=true\nrcon.password=secret\n",
     'world/level.dat' => 'level',
     'world/region/r.0.0.mca' => 'old',
     'world_nether/DIM-1/region/r.0.0.mca' => 'old nether',
@@ -40,7 +42,7 @@ $archives = new FileArchives($fake);
 $power = new Power($fake);
 $server = new Server();
 $files = new MinecraftServer($fake, $fake, $fake);
-$console = new ServerConsole($fake, new Logs($fake), new State($fake));
+$console = new ServerConsole($fake, new State($fake));
 $worldFiles = new WorldFiles($archives, $archives, $archives, $archives, $archives);
 $worlds = new Worlds($files, new World($files), $worldFiles);
 $snapshots = new Snapshots($files, $console, new ServerRcon($files), $power, $worldFiles, $worlds, new World($files));
@@ -49,12 +51,21 @@ $progress = function (int $percent, string $message) use (&$steps): void {
     $steps[] = $percent;
 };
 
-// Taking one while the server runs: autosave off, flushed, archived, autosave back on.
+// Taking one while the server runs: RCON turns autosave off and has the world flushed, the archive
+// is made, and RCON turns autosave back on.
 $first = $snapshots->take($server, 'First', null, Snapshot::MANUAL, 1, $progress);
 check('the active world with its Nether', $first->worlds, ['world', 'world_nether']);
-check('autosave is paused around the copy', array_values(array_intersect($fake->sent, ['save-off', 'save-all flush', 'save-on'])), ['save-off', 'save-all flush', 'save-on']);
+check('saved over RCON first', $fake->asked, ['save-off', 'save-all flush', 'save-on']);
+check('autosave back on over RCON', [$fake->sent, $fake->autosave], [[], true]);
 check('the archive moved into .snapshots', [isset($fake->files['.snapshots/'.$first->file()]), isset($fake->files['archive-1.tar.gz'])], [true, false]);
 check('progress only goes up', $steps === array_values(array_unique($steps)) && $steps === array_values((function ($s) { sort($s); return $s; })($steps)), true);
+
+// A world the admin keeps without autosave (a map meant to be reset) stays without it.
+$fake->autosave = false;
+$fake->asked = [];
+$snapshots->take($server, 'Kept off', null, Snapshot::MANUAL, 1, $progress);
+check('autosave kept off stays off', [$fake->autosave, in_array('save-on', $fake->asked, true), $fake->sent], [false, false, []]);
+$fake->autosave = true;
 
 // The world changes, then the snapshot comes back: the server stops, a safety snapshot is kept, and
 // the server starts again.
@@ -91,6 +102,21 @@ try {
 }
 $aside = array_values(array_filter(array_keys($fake->files), fn (string $path): bool => str_starts_with($path, 'world.before-restore-') && str_ends_with($path, 'r.0.0.mca')));
 check('the old world is kept aside', count($aside) === 1 && $fake->files[$aside[0]] === 'current', true);
+
+// Without RCON a running server is not snapshot: nothing says its world is on disk.
+$fake->state = 'running';
+$fake->files['server.properties'] = "level-name=world\n";
+$fake->sent = [];
+$noRcon = new Snapshots(new MinecraftServer($fake, $fake, $fake), $console, new ServerRcon(new MinecraftServer($fake, $fake, $fake)), $power, $worldFiles, $worlds, new World($files));
+throws('a running server needs RCON', fn () => $noRcon->take($server, 'No RCON', null, Snapshot::MANUAL, 1, $progress), 'needs RCON');
+check('autosave stays on', $fake->sent, ['save-on']);
+// RCON on but not answering: the same, with its reason.
+$fake->files['server.properties'] = "level-name=world\nenable-rcon=true\nrcon.password=secret\n";
+$fake->rconUp = false;
+$noAnswer = new Snapshots(new MinecraftServer($fake, $fake, $fake), $console, new ServerRcon(new MinecraftServer($fake, $fake, $fake)), $power, $worldFiles, $worlds, new World($files));
+throws('RCON not answering', fn () => $noAnswer->take($server, 'No answer', null, Snapshot::MANUAL, 1, $progress), 'not reachable');
+$fake->rconUp = true;
+$fake->state = 'offline';
 
 // One job at a time per server.
 Cache::$locks['minecraft:worlds:'.$server->uuid] = true;

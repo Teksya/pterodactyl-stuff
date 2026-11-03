@@ -10,21 +10,19 @@ use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
-use OlivierDutoit\Minecraft\MinecraftProvider;
 use OlivierDutoit\Minecraft\Nbt\Nbt;
 use Pterodactyl\Contracts\Files\ListsDirectories;
 use Pterodactyl\Contracts\Files\ReadsFileContents;
 use Pterodactyl\Contracts\Files\WritesFileContents;
 use Pterodactyl\Enum\JwtScope;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
-use Pterodactyl\Facades\Extensions;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\User;
 use Pterodactyl\Services\Nodes\NodeJwt;
 use RuntimeException;
 use Throwable;
 
-/** A Minecraft server's files as the panel reads and writes them through Wings, and where it listens. */
+/** A Minecraft server's files as the panel reads and writes them through Wings. */
 final class MinecraftServer
 {
     public const string PROPERTIES = 'server.properties';
@@ -271,24 +269,5 @@ final class MinecraftServer
         }
 
         return $result;
-    }
-
-    /**
-     * Where the game listens: the main allocation's address, or, when it listens on every address,
-     * the configured host or else the node's FQDN.
-     *
-     * @return array{string, int}
-     */
-    public function address(Server $server): array
-    {
-        $allocation = $server->allocation;
-        $ip = (string) $allocation?->ip;
-        if (! in_array($ip, ['', '0.0.0.0', '::', '[::]'], true)) {
-            return [$ip, (int) $allocation?->port];
-        }
-
-        $configured = trim((string) Extensions::settings(MinecraftProvider::ID)->get('status_host', ''));
-
-        return [$configured !== '' ? $configured : $server->node->fqdn, (int) $allocation?->port];
     }
 }

@@ -22,9 +22,10 @@ import {
     useServerPermission,
     type ScreenComponentProps,
 } from '@pterodactyl/sdk';
-import { addByName, broadcast, changeIpBan, enableRcon, ipBans, keys, overview, players as fetchPlayers, type ListName } from '../api';
+import { addByName, broadcast, changeIpBan, ipBans, keys, overview, players as fetchPlayers, type ListName } from '../api';
 import { motdLines } from '../properties/motd';
-import RestartNotice from '../RestartNotice';
+import RconDialog from '../RconDialog';
+import RconRequired from '../RconRequired';
 import type { Overview, RconStatus } from '../types';
 import PlayerDetail from './PlayerDetail';
 import PlayerList from './PlayerList';
@@ -62,6 +63,11 @@ export default function PlayersScreen({ data }: ScreenComponentProps) {
             ) : (
                 <div className='mc:flex mc:flex-col mc:gap-4'>
                     <ServerStats summary={summary.data} />
+                    {summary.data?.running && rcon && rcon.state !== 'ok' && (
+                        <RconRequired rcon={rcon} onSettings={onRcon}>
+                            Who is online, and what a player holds while they play, is asked over RCON.
+                        </RconRequired>
+                    )}
                     <TopBar running={summary.data?.running ?? false} rcon={rcon} onRcon={onRcon} />
                     {list.isPending ? (
                         <Spinner size='large' centered />
@@ -86,9 +92,9 @@ function ServerStats({ summary }: { summary: Overview | undefined }) {
             <Stat
                 icon={Users}
                 label='Online Players'
-                value={summary ? (summary.running ? String(summary.online) : 'Offline') : '—'}
-                limit={summary?.running && summary.max !== null ? `/ ${summary.max}` : undefined}
-                unavailable={summary !== undefined && !summary.running}
+                value={!summary ? '—' : !summary.running ? 'Offline' : summary.online === null ? 'Needs RCON' : String(summary.online)}
+                limit={summary?.running && summary.online !== null && summary.max !== null ? `/ ${summary.max}` : undefined}
+                unavailable={summary !== undefined && (!summary.running || summary.online === null)}
             />
             <Stat icon={MessageSquareText} label='MOTD' value={<span className='mc:block mc:truncate' title={motd || undefined}>{motd || '—'}</span>} />
             <Stat icon={MapIcon} label='Map Name' value={summary?.world ?? '—'} />
@@ -124,7 +130,7 @@ function TopBar({ running, rcon, onRcon }: { running: boolean; rcon: RconStatus 
                 </DropdownMenuItem>
                 {rcon && onRcon && (
                     <DropdownMenuItem icon={Zap} onClick={onRcon}>
-                        {rcon.enabled ? 'RCON…' : 'Faster live data (RCON)…'}
+                        {rcon.enabled ? 'RCON…' : 'Turn on RCON…'}
                     </DropdownMenuItem>
                 )}
             </DropdownMenu>
@@ -158,90 +164,6 @@ function MessageAllDialog({ open, onClose }: { open: boolean; onClose: () => voi
                 <Button isLoading={send.isPending} disabled={!text.trim()} onClick={() => send.mutate()}>
                     Send
                 </Button>
-            </Dialog.Footer>
-        </Dialog>
-    );
-}
-
-/**
- * RCON lets the panel read an online player's inventory in one go and without writing in the
- * console. It needs a port of its own among the server's allocations.
- */
-export function RconDialog({ open, status, onClose }: { open: boolean; status: RconStatus; onClose: () => void }) {
-    const uuid = useCurrentServerUuid() ?? '';
-    const client = useQueryClient();
-    const [port, setPort] = useState(String(status.ports.includes(status.port ?? 0) ? status.port : (status.ports[0] ?? '')));
-    // A password already in server.properties may be the user's own: kept unless they ask for a new one.
-    const [password, setPassword] = useState<'keep' | 'new'>('keep');
-    const newPassword = !status.password || password === 'new';
-    const [turnedOn, setTurnedOn] = useState(false);
-    const enable = useMutation({
-        mutationFn: () => enableRcon(uuid, Number(port), newPassword),
-        onSuccess: () => {
-            setTurnedOn(true);
-            void client.invalidateQueries({ queryKey: keys.overview(uuid) });
-        },
-        onError: (error) => toast.error(httpErrorToHuman(error)),
-    });
-    const working = status.enabled && status.allocated;
-
-    return (
-        <Dialog open={open} onClose={onClose} title='Live data over RCON'>
-            {turnedOn ? (
-                <RestartNotice onRestarted={onClose}>RCON is on, on port {port}. It starts with the server's next start.</RestartNotice>
-            ) : (
-                <div className='mc:flex mc:flex-col mc:gap-4 mc:text-sm'>
-                    <p className='mc:m-0'>
-                        Without RCON the panel types its questions in the console and reads the answers back, which takes a few seconds and shows in the console. With RCON an online player&apos;s inventory and health come at once, silently.
-                    </p>
-                    {working && <Alert type='success'>RCON is on, on port {status.port}.</Alert>}
-                    {status.enabled && !status.allocated && (
-                        <Alert type='warning'>RCON is on, on port {status.port}, but that port is not one of this server&apos;s allocations, so the panel may not reach it. Choose an allocated port below.</Alert>
-                    )}
-                    {status.ports.length === 0 ? (
-                        <Alert type='info'>RCON needs a port of its own. Add an allocation in the Network tab (or ask your host for one), then come back.</Alert>
-                    ) : (
-                        <>
-                            <div>
-                                <Label htmlFor='mc-rcon-port'>Port</Label>
-                                <Select id='mc-rcon-port' value={port} options={status.ports.map((value) => ({ value: String(value), label: String(value) }))} onChange={(value) => setPort(String(value))} />
-                            </div>
-                            <div>
-                                {status.password && (
-                                    <>
-                                        <Label htmlFor='mc-rcon-password'>Password</Label>
-                                        <Select
-                                            id='mc-rcon-password'
-                                            value={password}
-                                            options={[
-                                                { value: 'keep', label: 'Keep the current password' },
-                                                { value: 'new', label: 'Replace it with a new random one' },
-                                            ]}
-                                            onChange={(value) => setPassword(value === 'new' ? 'new' : 'keep')}
-                                        />
-                                    </>
-                                )}
-                                <p className='mc:mt-1 mc:text-xs mc:text-muted-foreground'>
-                                    {!newPassword
-                                        ? 'The password in server.properties stays as it is.'
-                                        : status.password
-                                          ? 'The panel writes a new random password in server.properties: tools that use the current one will need the new one.'
-                                          : 'The panel writes a new random password in server.properties. Nobody else needs it.'}
-                                </p>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
-            <Dialog.Footer>
-                <Button isSecondary onClick={onClose}>
-                    {turnedOn ? 'Close' : 'Cancel'}
-                </Button>
-                {!turnedOn && status.ports.length > 0 && (
-                    <Button isLoading={enable.isPending} disabled={port === ''} onClick={() => enable.mutate()}>
-                        {working ? 'Use this port' : 'Turn on RCON'}
-                    </Button>
-                )}
             </Dialog.Footer>
         </Dialog>
     );

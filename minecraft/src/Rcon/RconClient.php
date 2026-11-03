@@ -9,17 +9,22 @@ namespace OlivierDutoit\Minecraft\Rcon;
  * any number of commands, each answered in full before the next is sent; an answer longer than one
  * packet (an inventory) comes in several, all read.
  */
-final class RconClient
+final class RconClient implements RconConnection
 {
     private const int AUTH = 3;
     private const int COMMAND = 2;
     private const int RESPONSE = 0;
     // The vanilla server cuts long answers into bodies of this many bytes.
     private const int FRAGMENT = 4096;
+    // Each read waits up to the timeout, and a whole answer comes within these seconds more, and is
+    // never longer than this: a server sending a byte at a time, or without end, cannot hold the panel.
+    private const int SLACK = 5;
+    private const int MAX_ANSWER = 2 << 20;
 
     /** @var resource */
     private $socket;
     private int $id = 0;
+    private float $deadline = INF;
 
     private function __construct(mixed $socket, private int $timeout)
     {
@@ -38,14 +43,15 @@ final class RconClient
 
         stream_set_timeout($socket, $timeout);
         $client = new self($socket, $timeout);
+        $client->deadline = microtime(true) + $timeout + self::SLACK;
         $client->authenticate($password);
 
         return $client;
     }
 
-    /** The server's answer to a command, without colour codes. */
     public function command(string $command): string
     {
+        $this->deadline = microtime(true) + $this->timeout + self::SLACK;
         $id = $this->send(self::COMMAND, $command);
         [$replyId, , $body] = $this->read();
         if ($replyId !== $id) {
@@ -62,13 +68,15 @@ final class RconClient
                     break;
                 }
                 $body .= $piece;
+                if (strlen($body) > self::MAX_ANSWER) {
+                    throw RconException::protocol('an answer longer than '.(self::MAX_ANSWER >> 20).' MB');
+                }
             }
         }
 
         return self::plain($body);
     }
 
-    /** How long each answer may take from now on: saving a world takes longer than a question. */
     public function wait(int $seconds): void
     {
         $this->timeout = $seconds;
@@ -144,7 +152,17 @@ final class RconClient
     {
         $data = '';
         while (strlen($data) < $count) {
-            $chunk = fread($this->socket, $count - strlen($data));
+            // No read waits past the answer's deadline, however slowly the bytes come.
+            if (is_finite($this->deadline)) {
+                $left = $this->deadline - microtime(true);
+                if ($left <= 0) {
+                    throw RconException::timeout($this->timeout + self::SLACK);
+                }
+                $wait = min($this->timeout, $left);
+                @stream_set_timeout($this->socket, (int) $wait, (int) (($wait - (int) $wait) * 1_000_000));
+            }
+            // A connection reset is a closed connection, not a PHP warning that escapes as an error.
+            $chunk = @fread($this->socket, $count - strlen($data));
             if ($chunk === false || $chunk === '') {
                 $meta = stream_get_meta_data($this->socket);
                 throw $meta['timed_out'] ? RconException::timeout($this->timeout) : RconException::protocol('a closed connection');

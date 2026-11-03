@@ -26,10 +26,13 @@ use Throwable;
 /**
  * World snapshots: archives of world folders kept in the server's .snapshots folder.
  *
- * A snapshot of a running server turns autosaving off and flushes the world first (over RCON when it
- * answers, else through the console), so the archive is whole. A restore stops the server, keeps a
- * snapshot of what it replaces when asked, sets the current folders aside (a rename), extracts the
- * archive, and only then deletes the folders it set aside; if the extraction fails they are put back. Everything that touches snapshots runs under one lock per
+ * A snapshot of a running server asks it over RCON to turn autosaving off and write the whole world
+ * to disk, and waits for its answer before archiving, so the archive is whole; without RCON a running
+ * server cannot be snapshot. Autosaving comes back with a command typed in its console.
+ *
+ * A restore stops the server, keeps a snapshot of what it replaces when asked, sets the current
+ * folders aside (a rename), extracts the archive, and only then deletes the folders it set aside; if
+ * the extraction fails they are put back. Everything that touches snapshots runs under one lock per
  * server.
  */
 final class Snapshots
@@ -37,7 +40,8 @@ final class Snapshots
     private const int STOP_SECONDS = 120;
     /** Wings' state is cached for up to 20 seconds: a reading is trusted once it is newer than that. */
     public static int $stateCacheSeconds = 22;
-    private const string SAVED = '/^(Saved the (game|world)|Save complete|ThreadedAnvilChunkStorage.*All dimensions are saved)/i';
+    // The answer to `save-all flush`: vanilla's "Saved the game", Bukkit's "Saved the world", "Save complete".
+    private const string SAVED = '/Saved the (game|world)|Save complete|All dimensions are saved/i';
     private const int SAVE_SECONDS = 120;
 
     public function __construct(
@@ -163,14 +167,29 @@ final class Snapshots
             throw new InvalidArgumentException($state === null ? 'Wings did not say whether the server runs.' : "The server is {$state}: take the snapshot once it is running or stopped.");
         }
 
-        $running = $state === 'running';
-        if ($running) {
-            // No autosave while the folders are read, and everything on disk first.
+        // Autosave turned off for the snapshot is turned back on after it; autosave the server already
+        // had off (a map meant to be reset) stays off.
+        $turnedOff = false;
+        if ($state === 'running') {
+            // No autosave while the folders are read, and everything on disk first: the server answers
+            // `save-all flush` once the world is written.
             $progress(10, 'Saving the world…');
-            $this->save($server, 'save-off');
-            if (! $this->saveAll($server)) {
+            try {
+                [$off, $saved] = $this->rcon->ask($server, ['save-off', 'save-all flush'], self::SAVE_SECONDS) + ['', ''];
+            } catch (RconException $exception) {
                 $this->saveOn($server);
-                throw new RuntimeException('The server did not confirm saving the world.');
+                if ($exception->getCode() === RconException::OFF) {
+                    throw new InvalidArgumentException('A snapshot of a running server needs RCON, to have the world saved first. Turn RCON on from the Players page, or stop the server.');
+                }
+                throw new RuntimeException('The server could not be asked over RCON to save the world first. '.$exception->getMessage(), 0, $exception);
+            }
+            // "Saving is already turned off".
+            $turnedOff = stripos($off, 'already') === false;
+            if (! preg_match(self::SAVED, $saved)) {
+                if ($turnedOff) {
+                    $this->saveOn($server);
+                }
+                throw new RuntimeException('The server did not confirm saving the world: '.mb_substr(trim($saved), 0, 200));
             }
         }
 
@@ -178,7 +197,7 @@ final class Snapshots
             $progress(30, 'Archiving '.implode(', ', $folders).'…');
             $size = $this->archives->archive($server, $folders, Snapshot::FOLDER, "{$uuid}.tar.gz");
         } finally {
-            if ($running) {
+            if ($turnedOff) {
                 $this->saveOn($server);
             }
         }
@@ -199,48 +218,23 @@ final class Snapshots
         return $snapshot;
     }
 
-    /** Turns autosaving back on; a failure must not hide the snapshot's own result. */
+    /**
+     * Turns autosaving back on, over RCON as it was turned off, on the same connection; through the
+     * console when RCON fails now, so the world is not left without autosave. A failure of both must
+     * not hide the snapshot's own result: it goes to the panel's log.
+     */
     private function saveOn(Server $server): void
     {
         try {
-            $this->save($server, 'save-on');
+            $this->rcon->ask($server, ['save-on']);
         } catch (Throwable) {
-            // The server stopped meanwhile: it saves normally at its next start.
-        }
-    }
-
-    /** `save-off` or `save-on`: over RCON when it answers, else to the console. Sending one twice is harmless. */
-    private function save(Server $server, string $command): void
-    {
-        try {
-            if ($this->rcon->run($server, [$command]) !== null) {
-                return;
-            }
-        } catch (RconException) {
-            // The console takes over.
-        }
-        $this->console->send($server, [$command]);
-    }
-
-    /**
-     * `save-all flush`, and whether the server confirmed it: over RCON when it answers (the answer
-     * comes once the world is on disk), else read back from the console.
-     */
-    private function saveAll(Server $server): bool
-    {
-        // Saving twice is harmless, so any RCON failure hands over to the console.
-        try {
-            $answer = $this->rcon->run($server, ['save-all flush'], self::SAVE_SECONDS)[0] ?? null;
-        } catch (RconException) {
-            $answer = null;
-        }
-        foreach (preg_split('/\R/', $answer ?? '') ?: [] as $line) {
-            if (preg_match(self::SAVED, trim($line))) {
-                return true;
+            try {
+                $this->console->send($server, ['save-on']);
+            } catch (Throwable $exception) {
+                // The server stopped meanwhile (it saves normally at its next start), or Wings failed.
+                report($exception);
             }
         }
-
-        return $this->console->sendAndWait($server, 'save-all flush', self::SAVED, self::SAVE_SECONDS) !== null;
     }
 
     private function deleteUnlocked(Server $server, Snapshot $snapshot): void

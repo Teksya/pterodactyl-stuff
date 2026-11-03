@@ -48,11 +48,16 @@ final class TakeSnapshot implements ShouldQueue
         try {
             $snapshot = $snapshots->take($server, $this->name, $this->worlds, $this->kind, $this->userId, fn (int $percent, string $message) => $this->report($progress, $percent, $message));
             if ($this->kind === Snapshot::SCHEDULED) {
-                SnapshotSchedule::query()->where('server_id', $server->id)->update(['last_run_at' => now()]);
+                SnapshotSchedule::query()->where('server_id', $server->id)->update(['last_run_at' => now(), 'last_error' => null, 'last_error_at' => null]);
             }
             $this->report($progress, 100, "Snapshot \"{$snapshot->name}\" taken.", 'completed');
         } catch (Throwable $exception) {
-            $this->report($progress, 100, mb_substr($exception->getMessage(), 0, 900), 'failed');
+            $message = mb_substr($exception->getMessage(), 0, 900);
+            $this->report($progress, 100, $message, 'failed');
+            // Nobody follows a scheduled snapshot: the Snapshots tab says why it failed.
+            if ($this->kind === Snapshot::SCHEDULED) {
+                SnapshotSchedule::query()->where('server_id', $server->id)->update(['last_error' => $message, 'last_error_at' => now()]);
+            }
             if (! $exception instanceof InvalidArgumentException) {
                 report($exception);
             }

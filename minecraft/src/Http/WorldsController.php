@@ -15,6 +15,7 @@ use OlivierDutoit\Minecraft\Jobs\TakeSnapshot;
 use OlivierDutoit\Minecraft\MinecraftProvider;
 use OlivierDutoit\Minecraft\Models\Snapshot;
 use OlivierDutoit\Minecraft\Models\SnapshotSchedule;
+use OlivierDutoit\Minecraft\Players\Players;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
 use OlivierDutoit\Minecraft\Worlds\Snapshots;
 use OlivierDutoit\Minecraft\Worlds\Worlds;
@@ -38,6 +39,7 @@ final class WorldsController
         private readonly Snapshots $snapshots,
         private readonly MinecraftServer $files,
         private readonly ExtensionJobProgress $progress,
+        private readonly Players $players,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -58,8 +60,13 @@ final class WorldsController
                     'interval_hours' => $schedule?->interval_hours ?? 0,
                     'keep' => $schedule?->keep ?? $this->automaticKeep(),
                     'last_run_at' => $schedule?->last_run_at?->toIso8601String(),
+                    'last_error' => $schedule?->last_error,
+                    'last_error_at' => $schedule?->last_error_at?->toIso8601String(),
                 ],
                 'limits' => ['manual' => $this->maxManual()],
+                // A running server is snapshot after RCON had it save its world.
+                'state' => $this->players->presence($server)['state'],
+                'rcon' => $this->players->rcon($server),
             ];
         });
     }

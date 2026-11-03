@@ -217,14 +217,23 @@ final class PlayerFile
     }
 
     /**
-     * Where a slot lives in the file: the list and the Slot number, or the `equipment` key.
+     * Where a slot lives in the file.
      *
      * @return array{string, int|string}
      */
     private function locate(string $slot): array
     {
-        $modern = $this->dataVersion() >= self::V1_21_5 || $this->root->get('equipment') !== null;
+        return self::place($slot, $this->dataVersion() >= self::V1_21_5 || $this->root->get('equipment') !== null);
+    }
 
+    /**
+     * Where a slot lives in a player's NBT: the list and the Slot number, or the `equipment` key, in
+     * which armour and the off hand are from 1.21.5 (`$modern`).
+     *
+     * @return array{string, int|string}
+     */
+    public static function place(string $slot, bool $modern): array
+    {
         if (preg_match('/^inventory\.(\d{1,2})$/', $slot, $match) && (int) $match[1] <= 35) {
             return ['Inventory', (int) $match[1]];
         }

@@ -16,6 +16,8 @@ use Pterodactyl\Models\Server;
  * @property int $interval_hours
  * @property int $keep
  * @property CarbonInterface|null $last_run_at
+ * @property string|null $last_error why the last automatic snapshot failed, until one is taken
+ * @property CarbonInterface|null $last_error_at
  * @property-read Server $server
  */
 class SnapshotSchedule extends Model
@@ -37,6 +39,7 @@ class SnapshotSchedule extends Model
             'interval_hours' => 'integer',
             'keep' => 'integer',
             'last_run_at' => 'datetime',
+            'last_error_at' => 'datetime',
         ];
     }
 

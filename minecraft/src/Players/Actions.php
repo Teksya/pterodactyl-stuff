@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace OlivierDutoit\Minecraft\Players;
 
 use InvalidArgumentException;
+use OlivierDutoit\Minecraft\Rcon\RconException;
 use OlivierDutoit\Minecraft\Server\MinecraftServer;
 use OlivierDutoit\Minecraft\Server\ServerConsole;
-use OlivierDutoit\Minecraft\Server\ServerRcon;
 use Pterodactyl\Models\Server;
 
 /**
- * What each action does: a command while the player is online (over RCON when it answers, else typed
- * in the console), a change to their saved file while they are away. The lists (operators, whitelist,
- * bans) go through commands while the server runs, which owns their files, and are edited as files
- * while it is stopped.
+ * What each action does. While the server runs, an action is a command typed in its console: it
+ * needs no answer, so nothing is read back. A player RCON says is offline has their saved file
+ * changed instead, which the server does not hold. While the server is stopped, the files change.
+ *
+ * Only a change that depends on what the player holds now (an item into a slot) asks first, over
+ * RCON, that the slot is empty.
  */
 final class Actions
 {
@@ -31,7 +33,6 @@ final class Actions
         private readonly Lists $lists,
         private readonly MinecraftServer $files,
         private readonly ServerConsole $console,
-        private readonly ServerRcon $rcon,
     ) {}
 
     /**
@@ -40,14 +41,15 @@ final class Actions
      */
     public function player(Server $server, string $uuid, string $action, array $input): array
     {
+        // A command or the file: that depends on who is online now, not a few seconds ago.
+        $this->players->fresh($server);
         $player = $this->players->find($server, $uuid);
         $name = $player['name'];
-        $status = $this->players->status($server);
-        $running = $status['state'] === 'running';
+        $state = $this->players->presence($server)['state'];
         $version = (int) ($this->files->version($server)['dataVersion'] ?? 0);
 
         if ($action === 'op_level') {
-            $this->assertStopped($status['state']);
+            $this->assertStopped($state);
             $this->lists->setOpLevel($server, $player['uuid'], Commands::integer($input['level'] ?? 4, 1, 4, 'level'));
 
             return ['message' => 'Operator level saved.', 'command' => null];
@@ -55,30 +57,40 @@ final class Actions
 
         if (isset(self::LIST_ACTIONS[$action])) {
             [$list, $add] = self::LIST_ACTIONS[$action];
-            if ($running) {
+            if ($state === 'running') {
                 return $this->command($server, Commands::player($this->needName($name), $action, $input, $version));
             }
-            $this->assertStopped($status['state']);
+            $this->assertStopped($state);
             $this->lists->change($server, $list, ['uuid' => $player['uuid'], 'name' => $name ?? $player['uuid']], $add, is_string($input['reason'] ?? null) ? Commands::text($input['reason']) : null);
 
             return ['message' => 'Saved. The server reads it when it starts.', 'command' => null];
         }
 
-        if ($player['online']) {
+        if ($state === 'running' && $player['online'] !== false) {
+            // Online, or the panel cannot tell without RCON: the command acts if the player is there.
+            $name = $this->needName($name);
             if ($action === 'move') {
-                $this->assertEmpty($server, $this->needName($name), Commands::slot($input['to'] ?? null));
+                $this->assertEmpty($server, $name, Commands::slot($input['to'] ?? null));
+            }
+            if ($action === 'give' && isset($input['slot'])) {
+                $this->assertEmpty($server, $name, Commands::slot($input['slot']));
             }
 
-            return $this->command($server, Commands::player($this->needName($name), $action, $input, $version));
+            $result = $this->command($server, Commands::player($name, $action, $input, $version));
+            if ($player['online'] === null) {
+                // The console answers whether it found the player; the panel does not read it.
+                $result['message'] = "Sent to the console. Whether {$name} is online is unknown here: the command acts only if they are.";
+            }
+
+            return $result;
         }
 
+        // Offline: RCON says so while the server runs, or the server is stopped.
         if (in_array($action, self::ONLINE_ONLY, true)) {
             throw new InvalidArgumentException(($name ?? 'This player').' is offline.');
         }
-        // While the server starts or stops it saves its players, and past twelve players online the
-        // panel may not know them all: a file changed then could be the file of someone playing.
-        if (! $status['complete']) {
-            throw new InvalidArgumentException('The panel cannot tell who is online right now (the server is starting or stopping, or did not answer). Try again in a moment.');
+        if ($state !== 'running') {
+            $this->assertStopped($state);
         }
 
         return $this->offline($server, $player['uuid'], $action, $input);
@@ -124,6 +136,10 @@ final class Actions
     }
 
     /**
+     * Types the commands in the console, by the vanilla commands' names on a server that keeps them as
+     * `minecraft:<name>`, so that a plugin which took a name does not get them. The server runs them
+     * at once; their answers show in its console, which the panel does not read.
+     *
      * @param  list<string>  $commands
      * @return array{message: string, command: string}
      */
@@ -132,14 +148,8 @@ final class Actions
         if (! $this->console->running($server)) {
             throw new InvalidArgumentException('The server is not running.');
         }
-
-        // RCON first: it runs the commands at once, says what they did, and keeps them out of the console.
-        $answers = $this->rcon->attempt($server, $commands);
-        if ($answers !== null) {
-            $said = array_filter(array_map(fn (string $answer): string => trim((string) preg_replace('/\s*\R\s*/', ' ', $answer)), $answers), fn (string $answer): bool => $answer !== '');
-
-            return ['message' => $said === [] ? 'Done.' : implode(' · ', $said), 'command' => implode(' · ', $commands)];
-        }
+        $namespace = $this->players->vanillaNames($server);
+        $commands = array_map(fn (string $command): string => Commands::vanilla($command, $namespace), $commands);
         $this->console->send($server, $commands);
 
         return ['message' => 'Sent to the console.', 'command' => implode(' · ', $commands)];
@@ -204,16 +214,21 @@ final class Actions
         return 'Experience changed.';
     }
 
-    /** A command cannot swap two items: the target has to be empty, as the server holds it now. */
+    /**
+     * A command cannot swap two items, and one put into a slot replaces what is there: the slot has
+     * to be empty, as RCON says of that slot now.
+     */
     private function assertEmpty(Server $server, string $name, string $slot): void
     {
-        $live = $this->players->live($server, $name);
-        if ($live === null) {
-            throw new InvalidArgumentException('The panel could not read the player\'s inventory from the console, so it cannot check that slot is empty. '.($this->players->liveError ?? ''));
+        try {
+            $holds = $this->players->holds($server, $name, $slot);
+        } catch (RconException $exception) {
+            throw new InvalidArgumentException($exception->getCode() === RconException::ANSWERED
+                ? "The panel could not tell whether that slot is empty: {$exception->getMessage()}"
+                : 'Putting an item into a slot of a player who is online needs RCON, to check the slot is empty. '.$exception->getMessage());
         }
-        $items = [...$live['inventory'], ...array_values(array_filter($live['armor'])), ...array_filter([$live['offhand']]), ...$live['enderItems']];
-        if (in_array($slot, array_column($items, 'slot'), true)) {
-            throw new InvalidArgumentException('That slot holds an item. While the player is online, items move to empty slots only.');
+        if ($holds) {
+            throw new InvalidArgumentException('That slot holds an item. While the player is online, items go to empty slots only.');
         }
     }
 

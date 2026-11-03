@@ -43,24 +43,30 @@ export const BAN_REASON = 'Banned by Operator';
 
 /**
  * The Management section: the Pelican plugin's four actions (OP, clear the inventory, kick, ban),
- * then the panel's others. Online, each one is a console command; offline, the ones that change
- * the player (game mode, health, food, place, items, effects, levels) edit their saved file.
+ * then the panel's others. While the server runs, each one is a command typed in the console, which
+ * acts if the player is there; when RCON says they are offline, or the server is stopped, the ones
+ * that change the player (game mode, health, food, place, items, effects, levels) edit their file.
  */
 export default function PlayerActions({ player, others, onGive }: Props) {
     const action = usePlayerAction(player.uuid);
     const [dialog, setDialog] = useState<DialogName | null>(null);
     const run = (input: PlayerAction) => action.mutateAsync(input).then(() => setDialog(null), () => {});
-    const online = player.online;
-    const offlineReason = `${player.name ?? 'The player'} is offline.`;
-    const editable = online || player.saved;
+    const running = player.state === 'running';
+    const stopped = player.state === 'offline';
+    // A command, unless RCON says the player is offline; without RCON the panel does not know, and
+    // the command acts if they are there.
+    const online = running && player.online !== false;
+    const editable = online || (player.saved && (stopped || (running && player.online === false)));
+    const lists = running || stopped;
+    const reason = running || stopped ? `${player.name ?? 'The player'} is offline.` : `The server is ${player.state ?? 'not answering'}.`;
     const isOp = player.op !== null;
 
-    const onlineOnly = (button: ReactNode) => (online ? button : <Tooltip content={offlineReason}>{<span className='mc:inline-flex'>{button}</span>}</Tooltip>);
+    const onlineOnly = (button: ReactNode) => (online ? button : <Tooltip content={reason}>{<span className='mc:inline-flex'>{button}</span>}</Tooltip>);
 
     return (
         <div className='mc:flex mc:flex-col mc:gap-4'>
             <div className='mc:flex mc:flex-wrap mc:gap-3'>
-                <Button size='small' color={isOp ? 'red' : 'green'} onClick={() => setDialog('op')}>
+                <Button size='small' color={isOp ? 'red' : 'green'} disabled={!lists} onClick={() => setDialog('op')}>
                     {isOp ? <ShieldAlert aria-hidden className='mc:mr-1.5 mc:size-4' /> : <ShieldCheck aria-hidden className='mc:mr-1.5 mc:size-4' />}
                     {isOp ? 'DEOP' : 'OP'}
                 </Button>
@@ -75,12 +81,12 @@ export default function PlayerActions({ player, others, onGive }: Props) {
                     </Button>
                 )}
                 {player.banned !== null ? (
-                    <Button size='small' color='green' onClick={() => setDialog('pardon')}>
+                    <Button size='small' color='green' disabled={!lists} onClick={() => setDialog('pardon')}>
                         <CheckCircle aria-hidden className='mc:mr-1.5 mc:size-4' />
                         Unban
                     </Button>
                 ) : (
-                    <Button size='small' color='red' onClick={() => setDialog('ban')}>
+                    <Button size='small' color='red' disabled={!lists} onClick={() => setDialog('ban')}>
                         <Ban aria-hidden className='mc:mr-1.5 mc:size-4' />
                         Ban
                     </Button>
@@ -133,11 +139,11 @@ export default function PlayerActions({ player, others, onGive }: Props) {
                         Add experience…
                     </DropdownMenuItem>
                     {player.whitelisted ? (
-                        <DropdownMenuItem icon={ListChecks} onClick={() => void run({ action: 'whitelist_remove' })}>
+                        <DropdownMenuItem icon={ListChecks} disabled={!lists} onClick={() => void run({ action: 'whitelist_remove' })}>
                             Remove from the whitelist
                         </DropdownMenuItem>
                     ) : (
-                        <DropdownMenuItem icon={ListChecks} onClick={() => void run({ action: 'whitelist_add' })}>
+                        <DropdownMenuItem icon={ListChecks} disabled={!lists} onClick={() => void run({ action: 'whitelist_add' })}>
                             Add to the whitelist
                         </DropdownMenuItem>
                     )}
@@ -153,7 +159,7 @@ export default function PlayerActions({ player, others, onGive }: Props) {
             <TextDialog key={`ban-${dialog === 'ban'}`} open={dialog === 'ban'} title={`Ban ${player.name}`} label='Reason' initial={BAN_REASON} confirm='Ban' pending={action.isPending} onClose={() => setDialog(null)} onRun={(reason) => run({ action: 'ban', reason })} />
             <TeleportDialog key={`teleport-${dialog === 'teleport'}`} open={dialog === 'teleport'} player={player} others={others} pending={action.isPending} onClose={() => setDialog(null)} onRun={run} />
             <EffectDialog key={`effect-${dialog === 'effect'}`} open={dialog === 'effect'} name={player.name ?? ''} pending={action.isPending} onClose={() => setDialog(null)} onRun={run} />
-            <XpDialog key={`xp-${dialog === 'xp'}`} open={dialog === 'xp'} player={player} pending={action.isPending} onClose={() => setDialog(null)} onRun={run} />
+            <XpDialog key={`xp-${dialog === 'xp'}`} open={dialog === 'xp'} player={player} byCommand={online} pending={action.isPending} onClose={() => setDialog(null)} onRun={run} />
             <Dialog.Confirm open={dialog === 'pardon'} title={`Unban ${player.name}?`} confirm='Unban' pending={action.isPending} onClose={() => setDialog(null)} onConfirmed={() => void run({ action: 'pardon' })}>
                 They can join the server again.
             </Dialog.Confirm>
@@ -227,7 +233,7 @@ function TeleportDialog({ open, player, others, pending, onClose, onRun }: Dialo
             onClose={onClose}
             onSubmit={() => void onRun(byCoordinates ? { action: 'teleport', x: coordinates.x!, y: coordinates.y!, z: coordinates.z!, dimension: dimension || undefined } : { action: 'teleport', to })}
         >
-            {player.online && others.length > 0 && (
+            {player.online === true && others.length > 0 && (
                 <div>
                     <Label htmlFor='mc-teleport-to'>To</Label>
                     <Select id='mc-teleport-to' value={to} onChange={(value) => setTo(String(value))} options={[{ value: '', label: 'Coordinates' }, ...others.map((other) => ({ value: other, label: other }))]} />
@@ -278,7 +284,7 @@ function EffectDialog({ open, name, pending, onClose, onRun }: DialogProps & { n
     );
 }
 
-function XpDialog({ open, player, pending, onClose, onRun }: DialogProps & { player: Profile }) {
+function XpDialog({ open, player, byCommand, pending, onClose, onRun }: DialogProps & { player: Profile; byCommand: boolean }) {
     const [amount, setAmount] = useState<number | null>(5);
     const [unit, setUnit] = useState<'levels' | 'points'>('levels');
 
@@ -290,7 +296,7 @@ function XpDialog({ open, player, pending, onClose, onRun }: DialogProps & { pla
                     <NumberInput id='mc-xp-amount' value={amount} min={-100000} max={100000} onValueChange={setAmount} />
                     <p className='mc:mt-1 mc:text-xs mc:text-muted-foreground'>Below zero takes it away.</p>
                 </div>
-                {player.online && (
+                {byCommand && (
                     <div>
                         <Label htmlFor='mc-xp-unit'>Of</Label>
                         <Select id='mc-xp-unit' value={unit} onChange={(value) => setUnit(value as 'levels' | 'points')} options={[{ value: 'levels', label: 'Levels' }, { value: 'points', label: 'Points' }]} />

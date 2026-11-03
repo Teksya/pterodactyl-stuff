@@ -10,13 +10,20 @@ use RuntimeException;
 final class RconException extends RuntimeException
 {
     public const int DENIED = 1;
-    /** The commands were sent, so they may have run: they must not be sent again another way. */
-    public const int SENT = 2;
+    /** RCON is not turned on in server.properties. */
+    public const int OFF = 2;
+    /** The server answered something else than what was asked. */
+    public const int ANSWERED = 3;
+
+    public static function off(): self
+    {
+        return new self('RCON is off: server.properties does not turn it on, or gives it no password.', self::OFF);
+    }
 
     /** The host stays out: it can be an address of the administrator's own network. */
     public static function unreachable(int $port, string $reason): self
     {
-        return new self("RCON is not reachable on port {$port} ({$reason}).");
+        return new self("RCON is not reachable on port {$port} ({$reason}). If it was just turned on, restart the server so it starts listening.");
     }
 
     public static function denied(): self
@@ -24,9 +31,12 @@ final class RconException extends RuntimeException
         return new self('The server refused the RCON password. If it was changed in server.properties, restart the server.', self::DENIED);
     }
 
-    public static function resting(): self
+    /** RCON failed a moment ago, for `$why`: the panel does not try again yet. */
+    public static function resting(int $seconds, ?string $why = null): self
     {
-        return new self('RCON did not answer a moment ago; the panel tries it again within a minute.');
+        return new self($why === null
+            ? "RCON did not answer a moment ago; the panel asks again within {$seconds} seconds."
+            : "{$why} The panel asks again within {$seconds} seconds.");
     }
 
     public static function timeout(int $seconds): self
@@ -39,8 +49,9 @@ final class RconException extends RuntimeException
         return new self("RCON answered with {$what}.");
     }
 
-    public static function sent(self $previous): self
+    /** The server answered, but not with what was asked: its words say why. */
+    public static function answered(string $answer): self
     {
-        return new self("RCON took the command but then failed, so it may have run: check the server before trying again. {$previous->getMessage()}", self::SENT, $previous);
+        return new self('The server answered: '.mb_substr(trim($answer), 0, 200), self::ANSWERED);
     }
 }

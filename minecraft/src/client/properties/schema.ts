@@ -105,7 +105,7 @@ export const SECTIONS: Section[] = [
         id: 'rcon',
         title: 'RCON',
         properties: [
-            { key: 'enable-rcon', label: 'RCON', help: 'A remote console. The Players page reads online players live through it; without it, from their save file.', field: toggle },
+            { key: 'enable-rcon', label: 'RCON', help: 'How the panel asks the running server what it holds: who is online, what each player holds, the time and game rules, and the save before a snapshot. Off, none of these while it runs.', field: toggle },
             { key: 'rcon.port', label: 'RCON port', help: 'One of the server\'s allocations, for tools outside the node to reach it.',field: { kind: 'number', min: 1, max: 65535 } },
             { key: 'rcon.password', label: 'RCON password', field: { kind: 'secret' } },
             { key: 'broadcast-rcon-to-ops', label: 'Show RCON commands to operators', field: toggle },

@@ -49,7 +49,9 @@ final class Commands
             'feed' => [$modern ? "effect give {$name} minecraft:saturation 1 10 true" : "effect {$name} 23 1 10 true"],
             'kill' => ["kill {$name}"],
             'clear' => [is_string($input['item'] ?? null) && $input['item'] !== '' ? "clear {$name} ".self::id($input['item'], 'item') : "clear {$name}"],
-            'give' => ["give {$name} ".self::id($input['item'] ?? null, 'item').' '.self::integer($input['count'] ?? 1, 1, 6400, 'count')],
+            'give' => [isset($input['slot'])
+                ? self::fill($name, self::slot($input['slot']), self::id($input['item'] ?? null, 'item'), self::integer($input['count'] ?? 1, 1, 64, 'count'), $version)
+                : "give {$name} ".self::id($input['item'] ?? null, 'item').' '.self::integer($input['count'] ?? 1, 1, 6400, 'count')],
             'remove_slot' => [self::emptySlot($name, self::slot($input['slot'] ?? null), $version)],
             'move' => self::move($name, self::slot($input['from'] ?? null), self::slot($input['to'] ?? null), $version),
             'effect' => [sprintf(
@@ -162,6 +164,47 @@ final class Commands
         return $version !== 0 && $version < PlayerFile::V1_13 ? "slot.{$name}" : $name;
     }
 
+    /**
+     * `$command` by the name of the vanilla command on a server that keeps them as `minecraft:<name>`
+     * (`$namespace`): on Bukkit-family servers a plugin can take a name (EssentialsX's `/item` refuses
+     * the console, its `/give` reads items its own way), and the panel writes the vanilla syntax. The
+     * command `execute` runs is named the same way.
+     */
+    public static function vanilla(string $command, string $namespace): string
+    {
+        if ($namespace === '' || str_starts_with($command, $namespace)) {
+            return $command;
+        }
+        $command = $namespace.$command;
+        if (str_starts_with($command, "{$namespace}execute ") && ($run = strpos($command, ' run ')) !== false) {
+            $command = substr($command, 0, $run + 5).$namespace.substr($command, $run + 5);
+        }
+
+        return $command;
+    }
+
+    /**
+     * Puts `$count` of `$item` into the slot. The caller checked it is empty; the command checks again,
+     * as the player may have put something there since and it would be replaced.
+     */
+    private static function fill(string $name, string $slot, string $item, int $count, int $version): string
+    {
+        $target = self::commandSlot($slot, $version);
+        $fill = $version === 0 || $version >= PlayerFile::V1_17
+            ? "item replace entity {$name} {$target} with {$item} {$count}"
+            : "replaceitem entity {$name} {$target} {$item} {$count}";
+
+        return $version !== 0 && $version < PlayerFile::V1_13 ? $fill : self::unless($name, $slot, $version)." run {$fill}";
+    }
+
+    /** `execute` while the slot is empty: `if items` from 1.20.5, the slot's data before. */
+    private static function unless(string $name, string $slot, int $version): string
+    {
+        return $version === 0 || $version >= PlayerFile::V1_20_5
+            ? "execute unless items entity {$name} ".self::commandSlot($slot, $version).' *'
+            : "execute unless data entity {$name} ".PlayerProfile::slotPath($slot, $version);
+    }
+
     private static function emptySlot(string $name, string $slot, int $version): string
     {
         $target = self::commandSlot($slot, $version);
@@ -173,8 +216,9 @@ final class Commands
     }
 
     /**
-     * Copies the item to the empty slot, then empties the one it came from. The caller makes sure the
-     * target is empty: a command cannot swap two items.
+     * Copies the item to the empty slot, then empties the one it came from, only once the item is in
+     * the target: the game refuses some (a block in the chest armour slot), and emptying the source
+     * then would lose it. The caller makes sure the target is empty: a command cannot swap two items.
      *
      * @return list<string>
      */
@@ -186,10 +230,14 @@ final class Commands
         if ($from === $to) {
             throw new InvalidArgumentException('Pick another slot.');
         }
+        $target = self::commandSlot($to, $version);
+        $landed = $version === 0 || $version >= PlayerFile::V1_20_5
+            ? "execute if items entity {$name} {$target} *"
+            : "execute if data entity {$name} ".PlayerProfile::slotPath($to, $version);
 
         return [
-            "item replace entity {$name} ".self::commandSlot($to, $version)." from entity {$name} ".self::commandSlot($from, $version),
-            self::emptySlot($name, $from, $version),
+            "item replace entity {$name} {$target} from entity {$name} ".self::commandSlot($from, $version),
+            "{$landed} run ".self::emptySlot($name, $from, $version),
         ];
     }
 

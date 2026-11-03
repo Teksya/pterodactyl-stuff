@@ -25,22 +25,42 @@ final class PlayerProfile
 
     /**
      * The fields a live profile reads, one `data get` each (the whole entity holds the large recipe
-     * book), named as the world's version names them.
+     * book), named as the world's version names them: the path of each, by the key from() reads.
      *
-     * @return list<string>
+     * @return array<string, string>
      */
     public static function livePaths(int $version): array
     {
-        $modern = $version === 0 || $version >= PlayerFile::V1_20_5;
-
-        return [
+        $latest = $version === 0;
+        $paths = [
             'Health', 'foodLevel', 'XpLevel', 'XpP', 'Pos', 'Dimension', 'playerGameType', 'SelectedItemSlot', 'Air',
             'Inventory', 'EnderItems',
-            ...($version === 0 || $version >= PlayerFile::V1_21_5 ? ['equipment'] : []),
-            // Effects by name from 1.20.2, attributes in lower case from 1.20.5.
-            $version === 0 || $version >= 3758 ? 'active_effects' : 'ActiveEffects',
-            $modern ? 'attributes' : 'Attributes',
+            ...($latest || $version >= PlayerFile::V1_21_5 ? ['equipment'] : []),
+            // Effects by name from 23w32a (1.20.2).
+            $latest || $version >= 3569 ? 'active_effects' : 'ActiveEffects',
         ];
+
+        // Of the attributes, the maximum health alone: lower case from 1.20.5, without "generic." from
+        // 1.21.2, namespaced from 1.16.
+        $maxHealth = match (true) {
+            $latest || $version >= 4080 => ['attributes', 'attributes[{id:"minecraft:max_health"}]'],
+            $version >= PlayerFile::V1_20_5 => ['attributes', 'attributes[{id:"minecraft:generic.max_health"}]'],
+            $version >= 2566 => ['Attributes', 'Attributes[{Name:"minecraft:generic.max_health"}]'],
+            default => ['Attributes', 'Attributes[{Name:"generic.maxHealth"}]'],
+        };
+
+        return [...array_combine($paths, $paths), $maxHealth[0] => $maxHealth[1]];
+    }
+
+    /**
+     * Where `data get entity` finds a slot (inventory.0-35, armor.head…, offhand, ender.0-26) of a
+     * player of the world's version.
+     */
+    public static function slotPath(string $slot, int $version): string
+    {
+        [$list, $key] = PlayerFile::place($slot, $version === 0 || $version >= PlayerFile::V1_21_5);
+
+        return $list === 'equipment' ? "equipment.{$key}" : "{$list}[{Slot:{$key}b}]";
     }
 
     /**
@@ -246,6 +266,10 @@ final class PlayerProfile
         foreach ([$entity['attributes'] ?? [], $entity['Attributes'] ?? []] as $attributes) {
             if (! is_array($attributes)) {
                 continue;
+            }
+            // A live read asks for the maximum health alone: one attribute rather than the list.
+            if (! array_is_list($attributes)) {
+                $attributes = [$attributes];
             }
             foreach ($attributes as $attribute) {
                 $id = is_array($attribute) ? ($attribute['id'] ?? $attribute['Name'] ?? '') : '';

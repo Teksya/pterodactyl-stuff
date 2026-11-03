@@ -33,8 +33,11 @@ import {
     type TableColumn,
 } from '@pterodactyl/sdk';
 import { activateWorld, createWorld, deleteSnapshot, deleteWorld, fileUrl, keys, restoreSnapshot, saveSchedule, takeSnapshot, worlds as fetchWorlds } from '../api';
+import RconDialog from '../RconDialog';
+import RconRequired from '../RconRequired';
 import RestartNotice from '../RestartNotice';
 import type { Snapshot, WorldFolder, WorldsData } from '../types';
+import { useRefetchOnPowerChange } from '../useServerState';
 import { useSnapshotJob } from './useJob';
 
 const INTERVALS = [
@@ -55,19 +58,34 @@ const TYPES = [
     { value: 'minecraft:amplified', label: 'Amplified' },
 ];
 
-/** World → Worlds & snapshots: the worlds in the server's folder, and snapshots of them to go back to. */
+/**
+ * World → Worlds & snapshots: the worlds in the server's folder, and snapshots of them to go back to.
+ * A running server is snapshot once RCON had it save its world: without RCON, only a stopped one.
+ */
 export default function SnapshotsTab() {
     const uuid = useCurrentServerUuid() ?? '';
     const query = useQuery({ queryKey: keys.worlds(uuid), queryFn: () => fetchWorlds(uuid), enabled: uuid !== '' });
+    // Whether a snapshot can be taken depends on the server running and RCON answering.
+    useRefetchOnPowerChange(query.refetch);
     const job = useSnapshotJob();
     const [switched, setSwitched] = useState(false);
+    const [rconOpen, setRconOpen] = useState(false);
+    const canManage = useServerPermission('ext.minecraft.manage');
+    const canEditFiles = useServerPermission('file.update');
 
     if (query.isPending) return <Spinner size='large' centered />;
     if (query.isError) return <Alert type='danger'>{httpErrorToHuman(query.error)}</Alert>;
+    const unsaved = query.data.state === 'running' && query.data.rcon.state !== 'ok';
 
     return (
         <div className='mc:flex mc:flex-col mc:gap-6'>
             {switched && <RestartNotice onRestarted={() => setSwitched(false)}>The server loads its world when it starts: restart it to play on the world you picked.</RestartNotice>}
+            {unsaved && (
+                <RconRequired rcon={query.data.rcon} onSettings={canManage && canEditFiles ? () => setRconOpen(true) : undefined}>
+                    A snapshot of a running server is taken once RCON had it save its world; stopped, it needs nothing.
+                </RconRequired>
+            )}
+            <RconDialog key={`rcon-${rconOpen}`} open={rconOpen} status={query.data.rcon} onClose={() => setRconOpen(false)} />
             {job.running && (
                 <div className='mc:rounded-md mc:border mc:border-border mc:bg-card mc:p-4' role='status'>
                     <div className='mc:mb-2 mc:flex mc:justify-between mc:gap-3 mc:text-sm'>
@@ -77,13 +95,13 @@ export default function SnapshotsTab() {
                     <ProgressBar value={job.percent} label='Snapshot job' tone='accent' />
                 </div>
             )}
-            <WorldsCard data={query.data} busy={job.running} onSwitched={() => setSwitched(true)} onSnapshot={(folders, name) => takeSnapshot(uuid, name, folders).then(({ job: id }) => job.follow(id))} />
-            <SnapshotsCard data={query.data} busy={job.running} onJob={job.follow} />
+            <WorldsCard data={query.data} busy={job.running} unsaved={unsaved} onSwitched={() => setSwitched(true)} onSnapshot={(folders, name) => takeSnapshot(uuid, name, folders).then(({ job: id }) => job.follow(id))} />
+            <SnapshotsCard data={query.data} busy={job.running} unsaved={unsaved} onJob={job.follow} />
         </div>
     );
 }
 
-function WorldsCard({ data, busy, onSwitched, onSnapshot }: { data: WorldsData; busy: boolean; onSwitched: () => void; onSnapshot: (folders: string[], name: string) => Promise<void> }) {
+function WorldsCard({ data, busy, unsaved, onSwitched, onSnapshot }: { data: WorldsData; busy: boolean; unsaved: boolean; onSwitched: () => void; onSnapshot: (folders: string[], name: string) => Promise<void> }) {
     const uuid = useCurrentServerUuid() ?? '';
     const client = useQueryClient();
     const canManage = useServerPermission('ext.minecraft.worlds');
@@ -140,7 +158,7 @@ function WorldsCard({ data, busy, onSwitched, onSnapshot }: { data: WorldsData; 
             ? [
                   actionsColumn<WorldFolder>(3, (world) => (
                       <RowActions>
-                          <RowActionButton icon={Camera} label='Take a snapshot' aria-label={`Snapshot ${world.name}`} disabled={busy || !world.found} onClick={() => void onSnapshot([world.folder], `${world.name}, ${new Date().toLocaleString()}`).catch((error) => toast.error(httpErrorToHuman(error)))} />
+                          <RowActionButton icon={Camera} label='Take a snapshot' disabledReason={unsaved ? 'A running server needs RCON to be snapshot' : undefined} aria-label={`Snapshot ${world.name}`} disabled={busy || unsaved || !world.found} onClick={() => void onSnapshot([world.folder], `${world.name}, ${new Date().toLocaleString()}`).catch((error) => toast.error(httpErrorToHuman(error)))} />
                           <RowActionButton icon={History} label='Load this world at the next start' aria-label={`Make ${world.name} active`} disabled={world.active || run.isPending} onClick={() => run.mutate(() => activateWorld(uuid, world.folder).then((result) => (onSwitched(), result)))} />
                           <DeleteAction aria-label={`Delete ${world.name}`} label={world.active ? 'The active world cannot be deleted' : canDelete ? 'Delete' : 'Deleting takes the permission to delete files'} disabled={world.active || !canDelete} onClick={() => setDeleting(world)} />
                       </RowActions>
@@ -226,7 +244,7 @@ function CreateWorldDialog({ open, onClose, onCreated }: { open: boolean; onClos
     );
 }
 
-function SnapshotsCard({ data, busy, onJob }: { data: WorldsData; busy: boolean; onJob: (job: string) => void }) {
+function SnapshotsCard({ data, busy, unsaved, onJob }: { data: WorldsData; busy: boolean; unsaved: boolean; onJob: (job: string) => void }) {
     const uuid = useCurrentServerUuid() ?? '';
     const client = useQueryClient();
     const canManage = useServerPermission('ext.minecraft.worlds');
@@ -298,7 +316,7 @@ function SnapshotsCard({ data, busy, onJob }: { data: WorldsData; busy: boolean;
             title='Snapshots'
             actions={
                 canManage && (
-                    <Button size='small' disabled={busy || full} title={full ? `This server keeps ${data.limits.manual} snapshots at most: delete one first.` : undefined} onClick={() => setTaking(true)}>
+                    <Button size='small' disabled={busy || full || unsaved} title={full ? `This server keeps ${data.limits.manual} snapshots at most: delete one first.` : unsaved ? 'A running server needs RCON to be snapshot.' : undefined} onClick={() => setTaking(true)}>
                         <Camera aria-hidden className='mc:mr-1.5 mc:size-4' />
                         Take a snapshot
                     </Button>
@@ -356,7 +374,7 @@ function TakeDialog({ open, worlds, active, onClose, onJob }: { open: boolean; w
                     <Label htmlFor='mc-snapshot-world'>World</Label>
                     <Select id='mc-snapshot-world' value={folder} options={worlds.filter((world) => world.found).map((world) => ({ value: world.folder, label: `${world.name}${world.active ? ' (active)' : ''}` }))} onChange={(value) => setFolder(String(value))} />
                 </div>
-                <p className='mc:m-0 mc:text-xs mc:text-muted-foreground'>The Nether and the End come along. A running server keeps running: autosaving pauses while the world is copied.</p>
+                <p className='mc:m-0 mc:text-xs mc:text-muted-foreground'>The Nether and the End come along. A running server keeps running: RCON has it save its world, and autosaving pauses while the world is copied.</p>
             </div>
             <Dialog.Footer>
                 <Button isSecondary onClick={onClose}>
@@ -424,8 +442,15 @@ function ScheduleForm({ data }: { data: WorldsData }) {
         onError: (error) => toast.error(httpErrorToHuman(error)),
     });
 
+    const failed = data.schedule.interval_hours > 0 && data.schedule.last_error;
+
     return (
         <div className='mc:mt-4 mc:flex mc:flex-wrap mc:items-end mc:gap-3 mc:border-t mc:border-border mc:pt-4'>
+            {failed && (
+                <Alert type='warning' className='mc:w-full'>
+                    The last automatic snapshot failed{data.schedule.last_error_at ? ` ${fromNow(data.schedule.last_error_at)}` : ''}: {data.schedule.last_error} It is tried again within the hour.
+                </Alert>
+            )}
             <div className='mc:w-44'>
                 <Label htmlFor='mc-schedule'>Automatic snapshots</Label>
                 <Select id='mc-schedule' value={interval} options={INTERVALS} onChange={(value) => setInterval(Number(value))} />

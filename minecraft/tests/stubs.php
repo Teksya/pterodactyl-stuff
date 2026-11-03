@@ -2,7 +2,7 @@
 
 /*
  * Stand-ins for the panel's classes, shared by the tests: interfaces of its contracts, a server whose
- * files, console and power state live in memory, and the few facades the code calls.
+ * files, console, RCON and power state live in memory, and the few facades the code calls.
  */
 
 declare(strict_types=1);
@@ -20,7 +20,6 @@ namespace Pterodactyl\Contracts\Files {
 
 namespace Pterodactyl\Contracts\Servers {
     interface SendsServerCommands { public function send(\Pterodactyl\Models\Server $server, string $command): void; }
-    interface ReadsServerLogs { public function read(\Pterodactyl\Models\Server $server, int $lines = 100): array; }
     interface ReadsServerState { public function read(\Pterodactyl\Models\Server $server): object; }
     interface SendsServerPower { public function send(\Pterodactyl\Models\Server $server, string $signal): void; }
 }
@@ -58,6 +57,8 @@ namespace Pterodactyl\Models {
 
     class Allocation
     {
+        public ?string $ip_alias = null;
+
         public function __construct(public string $ip, public int $port) {}
     }
 
@@ -329,16 +330,41 @@ namespace {
     use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
     use Pterodactyl\Models\Server;
 
-    /** The server's files, console and power state. */
+    /**
+     * The server's files, console, RCON and power state. The console records the commands typed in
+     * it; RCON answers questions as the game does, from the state below.
+     */
     final class FakeServer implements Pterodactyl\Contracts\Files\ReadsFileContents, Pterodactyl\Contracts\Files\WritesFileContents, Pterodactyl\Contracts\Files\ListsDirectories, Pterodactyl\Contracts\Servers\SendsServerCommands
     {
         public array $files = [];
+        /** Commands typed in the console. */
         public array $sent = [];
-        public array $log = ['[12:00:00 INFO]: Done (3.2s)!'];
         public string $state = 'offline';
-        /** Players `list` names. */
+        /** Who `list` names. */
         public array $online = [];
         public bool $failReads = false;
+        /** Whether RCON answers at all, and what it was asked. */
+        public bool $rconUp = true;
+        public array $asked = [];
+        /** @var array<string, array<string, string>> online players' data, as SNBT by name and path */
+        public array $live = [];
+        public int $dayTime = 6000;
+        public bool $raining = false;
+        public bool $thundering = false;
+        /** @var array<string, string> the game rules the server holds */
+        public array $rules = [];
+        /** A Bukkit-family server (Paper, Spigot…), which keeps the vanilla commands as `minecraft:<name>`. */
+        public bool $bukkit = false;
+        /** @var array<string, string> what a plugin answers for each command name it took */
+        public array $plugin = [];
+        /** Answers longer than this are cut short and end in "...", as a plugin does on some servers; 0 cuts none. */
+        public int $cut = 0;
+        /** How many RCON connections were opened. */
+        public int $connections = 0;
+        /** Commands typed in the console that a plugin took instead of the vanilla command. */
+        public array $refused = [];
+        /** Whether the world autosaves (`save-off`, `save-on`). */
+        public bool $autosave = true;
 
         public function read(Server $server, string $path, ?int $maxBytes = null): string
         {
@@ -378,22 +404,159 @@ namespace {
         public function send(Server $server, string $command): void
         {
             $this->sent[] = $command;
-            if ($command === 'list') {
-                $this->log[] = '[12:00:01 INFO]: There are '.count($this->online).' of a max of 20 players online: '.implode(', ', $this->online);
+            // The console's dispatcher is RCON's: a plugin that took a bare name gets the command.
+            if (isset($this->plugin[strtok($command, ' ')])) {
+                $this->refused[] = $command;
             }
-            if (str_starts_with($command, 'save-all')) {
-                $this->log[] = '[12:00:01 INFO]: Saved the game';
-            }
-            // Online players' data, as SNBT by name and path.
-            if (preg_match('/^data get entity (\S+) (\S+)$/', $command, $match)) {
-                $this->log[] = isset($this->live[$match[1]][$match[2]])
-                    ? "[12:00:01 INFO]: {$match[1]} has the following entity data: {$this->live[$match[1]][$match[2]]}"
-                    : "[12:00:01 INFO]: Found no elements matching {$match[2]}";
+            if (in_array($command, ['save-on', 'minecraft:save-on'], true)) {
+                $this->autosave = true;
             }
         }
 
-        /** @var array<string, array<string, string>> */
-        public array $live = [];
+        /** RCON's answer to a question, as the game words it. */
+        public function answer(string $command): string
+        {
+            $this->asked[] = $command;
+            if (str_starts_with($command, 'minecraft:')) {
+                if (! $this->bukkit) {
+                    return "Unknown or incomplete command, see below for error{$command}<--[HERE]";
+                }
+                $command = substr($command, strlen('minecraft:'));
+            } elseif (isset($this->plugin[strtok($command, ' ')])) {
+                return $this->plugin[strtok($command, ' ')];
+            }
+            if ($command === 'list uuids') {
+                $uuids = array_column(json_decode($this->files['usercache.json'] ?? '[]', true) ?: [], 'uuid', 'name');
+                $names = array_map(fn (string $name): string => isset($uuids[$name]) ? "{$name} ({$uuids[$name]})" : $name, $this->online);
+
+                return 'There are '.count($this->online).' of a max of 20 players online: '.implode(', ', $names);
+            }
+            if (preg_match('/^data get entity (\S+) (\S+)$/', $command, $match)) {
+                if (! in_array($match[1], $this->online, true)) {
+                    return 'No entity was found';
+                }
+                $value = $this->entityData($this->live[$match[1]] ?? [], $match[2]);
+                if ($value === null) {
+                    return "Found no elements matching {$match[2]}";
+                }
+                $answer = "{$match[1]} has the following entity data: {$value}";
+
+                return $this->cut > 0 && strlen($answer) > $this->cut ? substr($answer, 0, $this->cut).'...' : $answer;
+            }
+            if (str_starts_with($command, 'gamerule ')) {
+                $rule = substr($command, 9);
+
+                return isset($this->rules[$rule]) ? "Gamerule {$rule} is currently set to: {$this->rules[$rule]}" : 'Incorrect argument for command';
+            }
+            if (str_starts_with($command, 'execute if predicate ')) {
+                return (str_contains($command, 'thundering') ? $this->thundering : $this->raining) ? 'Test passed' : 'Test failed';
+            }
+
+            if ($command === 'save-off') {
+                [$was, $this->autosave] = [$this->autosave, false];
+
+                return $was ? 'Automatic saving is now disabled' : 'Saving is already turned off';
+            }
+            if ($command === 'save-on') {
+                $this->autosave = true;
+
+                return 'Automatic saving is now enabled';
+            }
+
+            return match ($command) {
+                'save-all flush' => 'Saving the game (this may take a moment!)Saved the game',
+                'time query daytime' => "The time is {$this->dayTime}",
+                default => 'Unknown or incomplete command, see below for error',
+            };
+        }
+
+        /**
+         * What an NBT path (`Inventory`, `Inventory[0].id`, `Inventory[{Slot:9b}]`,
+         * `components."minecraft:damage"`) names in an entity whose fields are SNBT, as SNBT; null
+         * for nothing. A field asked whole comes back as written, so a test can give an unreadable one.
+         *
+         * @param  array<string, string>  $fields
+         */
+        private function entityData(array $fields, string $path): ?string
+        {
+            preg_match_all('/"((?:[^"\\\\]|\\\\.)*)"|\[(-?\d+)\]|\[(\{[^\]]*\})\]|([^.\[\]"]+)/', $path, $steps, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
+            $field = array_shift($steps);
+            $name = $field[4] ?? $field[1];
+            if (! isset($fields[$name])) {
+                return null;
+            }
+            if ($steps === []) {
+                return $fields[$name];
+            }
+
+            $value = OlivierDutoit\Minecraft\Nbt\SnbtParser::parseAnswer($fields[$name]);
+            foreach ($steps as $step) {
+                if ($step[2] !== null) {
+                    $index = (int) $step[2];
+                    $value = is_array($value) && array_is_list($value) ? ($value[$index < 0 ? count($value) + $index : $index] ?? null) : null;
+                } elseif ($step[3] !== null) {
+                    $filter = OlivierDutoit\Minecraft\Nbt\SnbtParser::parseAnswer($step[3]);
+                    $value = array_values(array_filter(is_array($value) ? $value : [], fn (mixed $element): bool => is_array($element) && array_intersect_key($element, $filter) == $filter))[0] ?? null;
+                } else {
+                    $value = is_array($value) ? ($value[$step[4] ?? $step[1]] ?? null) : null;
+                }
+                if ($value === null) {
+                    return null;
+                }
+            }
+
+            return self::snbt($value);
+        }
+
+        /** A value as `data get` prints it, near enough for the panel's parser. */
+        private static function snbt(mixed $value): string
+        {
+            if (is_array($value) && array_is_list($value)) {
+                return '['.implode(', ', array_map(self::snbt(...), $value)).']';
+            }
+            if (is_array($value)) {
+                $entries = [];
+                foreach ($value as $key => $entry) {
+                    $entries[] = (preg_match('/^[\w.+-]+$/', (string) $key) ? $key : '"'.addcslashes((string) $key, '"\\').'"').': '.self::snbt($entry);
+                }
+
+                return '{'.implode(', ', $entries).'}';
+            }
+
+            return match (true) {
+                is_string($value) => '"'.addcslashes($value, '"\\').'"',
+                is_float($value) => $value.'d',
+                default => (string) $value,
+            };
+        }
+    }
+
+    /** An RCON connection to a FakeServer. */
+    final class FakeRcon implements OlivierDutoit\Minecraft\Rcon\RconConnection
+    {
+        public function __construct(private FakeServer $server) {}
+
+        public function command(string $command): string
+        {
+            return $this->server->answer($command);
+        }
+
+        public function wait(int $seconds): void {}
+
+        public function close(): void {}
+    }
+
+    /** The FakeServer RCON connects to from now on. */
+    function rconOf(FakeServer $fake): void
+    {
+        OlivierDutoit\Minecraft\Server\ServerRcon::$connector = function (string $host, int $port, string $password, int $timeout) use ($fake): FakeRcon {
+            if (! $fake->rconUp) {
+                throw OlivierDutoit\Minecraft\Rcon\RconException::unreachable($port, 'Connection refused');
+            }
+            $fake->connections++;
+
+            return new FakeRcon($fake);
+        };
     }
 
     /**
@@ -511,16 +674,6 @@ namespace {
         public function create(Server $server, string $name, string $root): void {}
     }
 
-    final class Logs implements Pterodactyl\Contracts\Servers\ReadsServerLogs
-    {
-        public function __construct(private FakeServer $server) {}
-
-        public function read(Server $server, int $lines = 100): array
-        {
-            return array_slice($this->server->log, -$lines);
-        }
-    }
-
     final class State implements Pterodactyl\Contracts\Servers\ReadsServerState
     {
         public function __construct(private FakeServer $server) {}
@@ -552,7 +705,7 @@ namespace {
             $run();
             $failures++;
             echo "FAIL {$what}: nothing thrown\n";
-        } catch (InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException|RuntimeException $exception) {
             if (! str_contains($exception->getMessage(), $message)) {
                 $failures++;
                 echo "FAIL {$what}: {$exception->getMessage()}\n";

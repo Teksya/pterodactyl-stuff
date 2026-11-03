@@ -31,7 +31,7 @@ export async function players(uuid: string): Promise<Player[]> {
     return (await http.get(`${base(uuid)}/players`)).data.players;
 }
 
-/** An online player is read live, over RCON or from the console; an offline one from their saved file. */
+/** A player: asked over RCON while they play, read from their save while they are offline or the server is stopped. */
 export async function profile(uuid: string, player: string): Promise<Profile> {
     return (await http.get(`${base(uuid)}/players/${player}`)).data;
 }

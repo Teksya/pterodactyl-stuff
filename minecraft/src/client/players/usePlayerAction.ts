@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { httpErrorToHuman, toast, useCurrentServerUuid } from '@pterodactyl/sdk';
-import { keys, playerAction, profile, worldAction, type PlayerAction, type WorldAction } from '../api';
+import { keys, playerAction, worldAction, type PlayerAction, type WorldAction } from '../api';
 
 /**
  * Runs an action on a player and shows how it went; their data is read again, half a second later
- * after a console command, so the server has applied it.
+ * after a command typed in the console, so the server has run it.
  */
 export function usePlayerAction(player: string) {
     const uuid = useCurrentServerUuid() ?? '';
@@ -15,7 +15,8 @@ export function usePlayerAction(player: string) {
         onSuccess: ({ message, command }) => {
             toast.success(command ? `${message} ${command}` : message);
             void client.invalidateQueries({ queryKey: keys.players(uuid) });
-            const refresh = () => client.fetchQuery({ queryKey: keys.player(uuid, player), queryFn: () => profile(uuid, player), staleTime: 0 });
+            // A read already on its way began before the action: it is cancelled, not waited for.
+            const refresh = () => client.invalidateQueries({ queryKey: keys.player(uuid, player) });
             if (command) window.setTimeout(() => void refresh(), 500);
             else void refresh();
         },
@@ -31,7 +32,7 @@ export function useWorldAction() {
         mutationFn: (action: WorldAction) => worldAction(uuid, action),
         onSuccess: ({ message, command }) => {
             toast.success(command ? `${message} ${command}` : message);
-            void client.invalidateQueries({ queryKey: keys.world(uuid) });
+            window.setTimeout(() => void client.invalidateQueries({ queryKey: keys.world(uuid) }), command ? 500 : 0);
         },
         onError: (error) => toast.error(httpErrorToHuman(error)),
     });

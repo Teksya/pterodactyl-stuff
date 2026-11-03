@@ -37,10 +37,6 @@ class MinecraftProvider extends ExtensionProvider
                 ->help('Show players\' skins and items\' pictures, which the browser loads from mc-heads.net, mc.nerothe.com and mcasset.cloud. Off: generated avatars and item names, with no outside request.')
                 ->field('toggle')
                 ->frontend(),
-            ExtensionSettingDefinition::make('status_host', 'status_host', '', ['nullable', 'string', 'max:255'])
-                ->label('Server address for the status ping')
-                ->help('Where the panel asks the game who is online, for servers whose allocation listens on every address (0.0.0.0). Empty: the node\'s FQDN. Servers on a specific address are always asked there.')
-                ->field('text'),
             ExtensionSettingDefinition::make('max_snapshots', 'max_snapshots', 10, ['integer', 'min:1', 'max:100'])
                 ->label('Snapshots per server')
                 ->help('How many snapshots users take by hand on one server. They are kept in the server\'s .snapshots folder and count towards its disk space.')

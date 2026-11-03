@@ -11,7 +11,7 @@ import InventoryPanel from './players/InventoryPanel';
 import { durability, maxDurability, playTime, shortName } from './players/items';
 import PlayerDetail, { LIVE_REFRESH } from './players/PlayerDetail';
 import PlayerList from './players/PlayerList';
-import { RconDialog } from './players/PlayersScreen';
+import RconDialog from './RconDialog';
 import { Hearts } from './players/Vitals';
 import { parseProperties, serializeProperties } from './properties/file';
 import { motdLines } from './properties/motd';
@@ -64,8 +64,13 @@ const steve: Player = {
     lastSeen: '2026-10-24T20:00:00+00:00',
 };
 
+// A stopped server: the player's save is the truth.
 const profile: Profile = {
     ...steve,
+    source: 'file',
+    state: 'offline',
+    rcon: { state: 'idle', error: null },
+    liveError: null,
     saved: true,
     health: 6.5,
     maxHealth: 20,
@@ -234,9 +239,21 @@ test('lists the players as the plugin does: tabs with counts, a search, a row of
     await waitFor(() => expect(post).toHaveBeenCalledWith('/api/client/servers/abc/extensions/minecraft/players/11111111-1111-1111-1111-111111111111/actions', { action: 'op' }));
 });
 
+test('without RCON a running server shows nobody online or offline, and kicks by command', async () => {
+    settings.textures = false;
+    const players: Player[] = [{ ...steve, online: null }, { ...steve, uuid: '22222222-2222-2222-2222-222222222222', name: 'Griefer', op: null, online: null, banned: 'Griefing' }];
+    withHost(<PlayerList players={players} onView={() => {}} />);
+
+    expect(await screen.findByRole('tab', { name: 'All 2' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /^Online/ })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /^Offline/ })).toBeNull();
+    expect(screen.getByText('—')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Kick Steve' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
 test("shows a player's page in the plugin's sections, with the panel's tools", async () => {
     settings.textures = false;
-    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: { ...profile, source: 'file', liveVia: null } });
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: profile });
     withHost(<PlayerDetail uuid={steve.uuid} online={[]} />);
 
     expect(await screen.findByRole('img', { name: 'Health: 7 of 20' })).toBeTruthy();
@@ -244,7 +261,8 @@ test("shows a player's page in the plugin's sections, with the panel's tools", a
     for (const section of ['Identity', 'Statistics', 'Status', 'Inventory', 'Ender Chest', 'Management']) {
         expect(screen.getByRole('heading', { name: section })).toBeTruthy();
     }
-    expect(screen.getByText('Offline - Displaying data from last save file')).toBeTruthy();
+    // When the save was written: the server writes it every few minutes and when the player leaves.
+    expect(screen.getByText(/^Offline - Displaying data from last save file, saved .+ ago$/)).toBeTruthy();
     expect(screen.getByText(steve.uuid)).toBeTruthy();
     expect(screen.getByText('11d 15h')).toBeTruthy();
     expect(screen.getByText(/^592\D?029 m$/)).toBeTruthy();
@@ -271,7 +289,7 @@ test("shows a player's page in the plugin's sections, with the panel's tools", a
 
 test('follows an online player read over RCON on its own, and leaves an offline one alone', async () => {
     settings.textures = false;
-    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: { ...profile, online: true, source: 'live', liveVia: 'rcon' } });
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: { ...profile, online: true, source: 'live', state: 'running', rcon: { state: 'ok', error: null } } });
     withHost(<PlayerDetail uuid={steve.uuid} online={['Steve']} />);
 
     expect(await screen.findByText(`Real-time data from server · updates every ${LIVE_REFRESH / 1000} seconds`)).toBeTruthy();
@@ -280,22 +298,76 @@ test('follows an online player read over RCON on its own, and leaves an offline 
     host?.dispose();
 
     get.mockClear();
-    get.mockResolvedValue({ data: { ...profile, online: false, source: 'file', liveVia: null } });
+    get.mockResolvedValue({ data: profile });
     withHost(<PlayerDetail uuid={steve.uuid} online={[]} />);
-    expect(await screen.findByText('Offline - Displaying data from last save file')).toBeTruthy();
+    expect(await screen.findByText(/^Offline - Displaying data from last save file/)).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, LIVE_REFRESH + 500));
     expect(get).toHaveBeenCalledTimes(1);
 }, 15_000);
 
-test('says where an online player is read from, and offers RCON when it is off', async () => {
+test('without RCON a running server shows the last save as one, leaves it as it is, and still sends commands', async () => {
     settings.textures = false;
     const onTurnOnRcon = vi.fn();
-    vi.spyOn(http, 'get').mockResolvedValue({ data: { ...profile, online: true, source: 'file', liveVia: 'off' } });
-    withHost(<PlayerDetail uuid={steve.uuid} online={['Steve']} onTurnOnRcon={onTurnOnRcon} />);
+    const lastSave = { ...profile, online: null, source: 'file', state: 'running', rcon: { state: 'off', error: null } };
+    vi.spyOn(http, 'get').mockResolvedValue({ data: lastSave });
+    withHost(<PlayerDetail uuid={steve.uuid} online={[]} onTurnOnRcon={onTurnOnRcon} />);
 
-    expect(await screen.findByText(/RCON disabled - Displaying data from save file/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Turn on RCON' }));
+    expect(await screen.findByText('Whether Steve is online, and what they hold while they play, is asked over RCON: below is their last save.')).toBeTruthy();
+    expect(screen.getByText('Unknown')).toBeTruthy();
+    expect(screen.getByText(/^Online or not, unknown without RCON - Displaying data from last save file, saved .+ ago, behind if they are playing$/)).toBeTruthy();
+    // Their save is shown, offline or not, but not changed: the server may hold them and write over it.
+    expect(screen.getByRole('heading', { name: 'Inventory' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Health: 7 of 20' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Empty slot' }).every((slot) => (slot as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.queryByText('Changes are written to their file and apply when they join.')).toBeNull();
+    // Commands act if the player is there: no need to know.
+    expect((screen.getByRole('button', { name: 'Message' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Heal' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on RCON…' }));
     expect(onTurnOnRcon).toHaveBeenCalled();
+});
+
+test('says why RCON did not answer, with a restart for one just turned on', async () => {
+    settings.textures = false;
+    vi.spyOn(http, 'get').mockResolvedValue({
+        data: { ...profile, online: null, state: 'running', rcon: { state: 'error', error: 'RCON is not reachable on port 25575 (Connection refused).' } },
+    });
+    withHost(<PlayerDetail uuid={steve.uuid} online={[]} />);
+
+    expect(await screen.findByText(/asking it failed: RCON is not reachable on port 25575/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restart the server' })).toBeTruthy();
+});
+
+test('says which parts of a live read RCON did not give as the game prints them', async () => {
+    settings.textures = false;
+    const live = { ...profile, online: true, source: 'live', state: 'running', rcon: { state: 'ok', error: null } };
+    const get = vi.spyOn(http, 'get').mockResolvedValue({
+        data: { ...live, inventory: [], unread: [{ field: 'Inventory', reason: 'Unexpected character in SNBT at 12, near "[{count: 1, §".' }] },
+    });
+    withHost(<PlayerDetail uuid={steve.uuid} online={['Steve']} />);
+
+    expect(await screen.findByText('Part of what RCON answered about Steve could not be read, and is missing here:')).toBeTruthy();
+    expect(screen.getByText('Inventory', { selector: 'code' })).toBeTruthy();
+    expect(screen.getByText(/Unexpected character in SNBT at 12/)).toBeTruthy();
+    // A live read in full says nothing of the kind.
+    cleanup();
+    host?.dispose();
+    get.mockResolvedValue({ data: { ...live, unread: [] } });
+    withHost(<PlayerDetail uuid={steve.uuid} online={['Steve']} />);
+    expect(await screen.findByText(/^Real-time data from server/)).toBeTruthy();
+    expect(screen.queryByText(/could not be read/)).toBeNull();
+});
+
+test('says what the server answered for an online player RCON did not read', async () => {
+    settings.textures = false;
+    vi.spyOn(http, 'get').mockResolvedValue({
+        data: { ...profile, online: true, source: 'none', state: 'running', saved: false, rcon: { state: 'ok', error: null }, liveError: 'The server answered: No entity was found.' },
+    });
+    withHost(<PlayerDetail uuid={steve.uuid} online={['Steve']} />);
+
+    expect(await screen.findByText(/RCON did not read Steve: The server answered: No entity was found\./)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Inventory' })).toBeNull();
+    expect(screen.queryByText(/is asked over RCON/)).toBeNull();
 });
 
 const worldsData: WorldsData = {
@@ -305,13 +377,15 @@ const worldsData: WorldsData = {
         { folder: 'creative', folders: ['creative'], active: false, found: true, name: 'Creative build', version: '1.21.4', seed: '2', hardcore: false, gameMode: 'creative', lastPlayed: null },
     ],
     snapshots: [{ uuid: 'snap-1', name: 'Before the update', worlds: ['world', 'world_nether'], size: 1024, version: '1.21.1', automatic: false, path: '.snapshots/snap-1.tar.gz', created_at: '2026-10-24T10:00:00+00:00', missing: false }],
-    schedule: { interval_hours: 0, keep: 5, last_run_at: null },
+    schedule: { interval_hours: 0, keep: 5, last_run_at: null, last_error: null, last_error_at: null },
     limits: { manual: 10 },
+    state: 'offline',
+    rcon: { enabled: false, port: 25575, allocated: false, password: false, ports: [25580], state: 'idle', error: null },
 };
 
 test('turns RCON on on a free allocation port, or asks for one', async () => {
     const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { enabled: true, port: 25580, allocated: true, password: true, ports: [25580, 25590] } });
-    let { unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [25580, 25590] }} onClose={() => {}} />);
+    let { unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [25580, 25590], state: 'off', error: null }} onClose={() => {}} />);
 
     // Without a password yet, nothing to ask: a new random one.
     expect(await screen.findByText(/Nobody else needs it/)).toBeTruthy();
@@ -323,14 +397,14 @@ test('turns RCON on on a free allocation port, or asks for one', async () => {
     host?.dispose();
 
     // With one already in server.properties, it is kept unless the user asks for a new one.
-    ({ unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: true, ports: [25580, 25590] }} onClose={() => {}} />));
+    ({ unmount } = withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: true, ports: [25580, 25590], state: 'off', error: null }} onClose={() => {}} />));
     expect(await screen.findByText('The password in server.properties stays as it is.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Turn on RCON' }));
     await waitFor(() => expect(post).toHaveBeenLastCalledWith('/api/client/servers/abc/extensions/minecraft/rcon', { port: 25580, new_password: false }));
     unmount();
     host?.dispose();
 
-    withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [] }} onClose={() => {}} />);
+    withHost(<RconDialog open status={{ enabled: false, port: 25575, allocated: false, password: false, ports: [], state: 'off', error: null }} onClose={() => {}} />);
     expect(await screen.findByText(/Add an allocation in the Network tab/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Turn on RCON' })).toBeNull();
 });
@@ -353,6 +427,32 @@ test('lists worlds and snapshots, takes one, then follows it as one job at a tim
     await waitFor(() => expect(post).toHaveBeenCalledWith('/api/client/servers/abc/extensions/minecraft/snapshots', { name: 'Before the event', worlds: ['world'] }));
     // One job at a time: the page follows the snapshot, so the next one waits.
     await waitFor(() => expect((screen.getByRole('button', { name: /Take a snapshot/ }) as HTMLButtonElement).disabled).toBe(true));
+});
+
+test('a running server without RCON is not snapshot, and says why', async () => {
+    vi.spyOn(http, 'get').mockResolvedValue({ data: { ...worldsData, state: 'running', rcon: { ...worldsData.rcon, state: 'off' } } });
+    withHost(<SnapshotsTab />);
+
+    expect(await screen.findByText(/A snapshot of a running server is taken once RCON had it save its world/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Take a snapshot/ }) as HTMLButtonElement).disabled).toBe(true);
+    // A restore stops the server first: it needs no RCON.
+    expect((screen.getByRole('button', { name: 'Restore Before the update' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test('says why the last automatic snapshot failed, while snapshots are scheduled', async () => {
+    const failed = { interval_hours: 6, keep: 5, last_run_at: null, last_error: 'A snapshot of a running server needs RCON, to have the world saved first.', last_error_at: '2026-11-03T10:00:00+00:00' };
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: { ...worldsData, schedule: failed } });
+    withHost(<SnapshotsTab />);
+
+    expect(await screen.findByText(/^The last automatic snapshot failed .+ ago: A snapshot of a running server needs RCON/)).toBeTruthy();
+    cleanup();
+    host?.dispose();
+
+    // Turned off, the schedule has nothing left to say.
+    get.mockResolvedValue({ data: { ...worldsData, schedule: { ...failed, interval_hours: 0 } } });
+    withHost(<SnapshotsTab />);
+    expect(await screen.findByRole('button', { name: /Take a snapshot/ })).toBeTruthy();
+    expect(screen.queryByText(/The last automatic snapshot failed/)).toBeNull();
 });
 
 test('restores a snapshot keeping one of the current worlds first', async () => {
